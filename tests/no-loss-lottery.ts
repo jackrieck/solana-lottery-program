@@ -176,7 +176,11 @@ describe("no-loss-lottery", () => {
           vaultManager: vaultMgr,
           tickets: tickets,
           ticket: ticket,
+          prize: prize,
           user: program.provider.wallet.publicKey,
+          userAta: userAta.address,
+          systemProgram: anchor.web3.SystemProgram.programId,
+          tokenProgram: spl.TOKEN_PROGRAM_ID,
         },
       }
     );

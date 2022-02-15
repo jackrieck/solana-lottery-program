@@ -190,7 +190,7 @@ pub mod no_loss_lottery {
     pub fn find(
         ctx: Context<Find>,
         _vault_bump: u8,
-        _vault_mgr_bump: u8,
+        vault_mgr_bump: u8,
         _tickets_bump: u8,
     ) -> ProgramResult {
         // check if winning PDA exists
@@ -214,7 +214,25 @@ pub mod no_loss_lottery {
         // set winner as ticket owner
         ctx.accounts.vault_manager.winner = ctx.accounts.ticket.owner;
 
-        Ok(())
+        let transfer_accounts = token::Transfer {
+            from: ctx.accounts.vault.clone().to_account_info(),
+            to: ctx.accounts.user_ata.clone().to_account_info(),
+            authority: ctx.accounts.vault_manager.clone().to_account_info(),
+        };
+
+        // transfer prize to winner
+        token::transfer(
+            CpiContext::new_with_signer(
+                ctx.accounts.token_program.clone().to_account_info(),
+                transfer_accounts,
+                &[&[
+                    ctx.accounts.mint.key().as_ref(),
+                    ctx.accounts.vault.key().as_ref(),
+                    &[vault_mgr_bump],
+                ]],
+            ),
+            ctx.accounts.prize.amount,
+        )
     }
 }
 
@@ -410,8 +428,17 @@ pub struct Find<'info> {
     #[account(mut)]
     pub ticket: Box<Account<'info, Ticket>>,
 
+    #[account(mut, has_one = mint)]
+    pub prize: Box<Account<'info, token::TokenAccount>>,
+
     #[account(mut)]
     pub user: Signer<'info>,
+
+    #[account(mut, has_one = mint)]
+    pub user_ata: Account<'info, token::TokenAccount>,
+
+    pub system_program: Program<'info, System>,
+    pub token_program: Program<'info, token::Token>,
 }
 
 #[account]
