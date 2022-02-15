@@ -157,26 +157,32 @@ pub mod no_loss_lottery {
         Ok(())
     }
 
+    // check if a winning PDA exists
+    // force passing in the winning numbers PDA
+    // if PDA exists, send prize
+    // if not error
     pub fn find(
         ctx: Context<Find>,
         _vault_bump: u8,
         vault_mgr_bump: u8,
         _tickets_bump: u8,
+        _numbers: [u8; 6],
+        _ticket_bump: u8,
     ) -> ProgramResult {
-        // check if winning PDA exists
-        let winning_numbers = ctx.accounts.vault_manager.winning_numbers;
+        //// check if winning PDA exists
+        //let winning_numbers = ctx.accounts.vault_manager.winning_numbers;
 
-        // get ticket numbers from PDA passed in
-        let ticket_numbers = ctx.accounts.ticket.numbers;
+        //// get ticket numbers from PDA passed in
+        //let ticket_numbers = ctx.accounts.ticket.numbers;
 
-        // check if the numbers match the winning numbers
-        for (i, n) in winning_numbers.iter().enumerate() {
-            if n != &ticket_numbers[i] {
-                // reset winning_numbers
-                // reset draw time
-                return Err(ErrorCode::NoWinner.into());
-            }
-        }
+        //// check if the numbers match the winning numbers
+        //for (i, n) in winning_numbers.iter().enumerate() {
+        //    if n != &ticket_numbers[i] {
+        //        // reset winning_numbers
+        //        // reset draw time
+        //        return Err(ErrorCode::NoWinner.into());
+        //    }
+        //}
 
         let transfer_accounts = token::Transfer {
             from: ctx.accounts.prize.clone().to_account_info(),
@@ -368,7 +374,7 @@ pub struct Draw<'info> {
 }
 
 #[derive(Accounts)]
-#[instruction(vault_bump: u8, vault_mgr_bump: u8, tickets_bump: u8)]
+#[instruction(vault_bump: u8, vault_mgr_bump: u8, tickets_bump: u8, numbers: [u8; 6], ticket_bump: u8)]
 pub struct Find<'info> {
     #[account(mut)]
     pub mint: Account<'info, token::Mint>,
@@ -389,7 +395,7 @@ pub struct Find<'info> {
     #[account(mut)]
     pub tickets: Account<'info, token::Mint>,
 
-    #[account(mut)]
+    #[account(mut, seeds = [&numbers], bump = ticket_bump)]
     pub ticket: Box<Account<'info, Ticket>>,
 
     #[account(mut, has_one = mint)]
@@ -411,12 +417,9 @@ pub struct VaultManager {
     pub mint: Pubkey,
     pub vault: Pubkey,
     pub tickets: Pubkey,
-    pub vault_tickets_ata: Pubkey,
     pub draw_time: i64, // in ms, lottery end time
     pub ticket_price: u64,
     pub winning_numbers: [u8; 6],
-    pub lottery_ended: bool,
-    pub winner: Pubkey,
 }
 
 #[account]
@@ -429,13 +432,6 @@ pub struct Ticket {
     pub numbers: [u8; 6],
 }
 
-#[account]
-#[derive(Default)]
-pub struct LotteryResult {
-    pub winner_exists: bool,
-    pub winner: Pubkey,
-}
-
 #[error]
 pub enum ErrorCode {
     #[msg("TimeRemaining")]
@@ -446,4 +442,7 @@ pub enum ErrorCode {
 
     #[msg("Lottery In Progress")]
     LotteryInProgress,
+
+    #[msg("Unexpected Ticket")]
+    UnexpectedTicket,
 }
