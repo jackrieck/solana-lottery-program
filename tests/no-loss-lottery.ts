@@ -107,7 +107,7 @@ describe("no-loss-lottery", () => {
 
     // choose your lucky numbers!
     let numbers: Array<number>;
-    numbers = [1, 2, 3, 4, 5, 7];
+    numbers = [1, 2, 3, 4, 5, 6];
 
     // create ticket PDA
     const [ticket, ticketBump] = await anchor.web3.PublicKey.findProgramAddress(
