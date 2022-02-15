@@ -188,11 +188,16 @@ pub mod no_loss_lottery {
         // zero out winning numbers
         ctx.accounts.vault_manager.winning_numbers = [0u8; 6];
 
-        // if numbers are zero'd out this means this account was initialized in this transaction
+        // if numbers are zeroed out this means this account was initialized in this transaction
         // no winner found
         if ctx.accounts.ticket.numbers == [0u8; 6] {
             // we cannot error here because we need the variables to persist in the vault_manager account
-            return Ok(());
+            // close newly created account and return SOL to user
+            // TODO: emit an event for this condition
+            return ctx
+                .accounts
+                .ticket
+                .close(ctx.accounts.user.to_account_info());
         }
 
         let transfer_accounts = token::Transfer {
