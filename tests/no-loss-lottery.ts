@@ -164,6 +164,12 @@ describe("no-loss-lottery", () => {
     );
     console.log("drawTxSig:", drawTxSig);
 
+    // mint tokens to prize for testing
+    await mint.mintTo(prize, mintAuthority.publicKey, [], 100);
+    console.log(
+      "minted 100 tokens to prize ata, dont actually do this in prod"
+    );
+
     // find winner
     const findTxSig = await program.rpc.find(
       vaultBump,
@@ -185,12 +191,6 @@ describe("no-loss-lottery", () => {
       }
     );
     console.log("findTxSig:", findTxSig);
-
-    // mint tokens to prize for testing
-    await mint.mintTo(prize, mintAuthority.publicKey, [], 100);
-    console.log(
-      "minted 100 tokens to prize ata, dont actually do this in prod"
-    );
 
     // user redeem tokens + any winnings
     const redeemTxSig = await program.rpc.redeem(

@@ -92,10 +92,6 @@ pub mod no_loss_lottery {
         _ticket_bump: u8,
         _prize_bump: u8,
     ) -> ProgramResult {
-        // if lottery is still running, you cannot redeem
-        if !ctx.accounts.vault_manager.lottery_ended {
-            return Err(ErrorCode::LotteryInProgress.into());
-        };
 
         // burn a ticket from the user ATA
         let burn_accounts = token::Burn {
@@ -118,31 +114,6 @@ pub mod no_loss_lottery {
         ctx.accounts
             .ticket
             .close(ctx.accounts.user.clone().to_account_info())?;
-
-        // if winner redeems, give them the prize!
-        // TODO: mark winner as received prize
-        if ctx.accounts.vault_manager.winner == ctx.accounts.user.key() {
-            let prize_transfer_accounts = token::Transfer {
-                from: ctx.accounts.prize.clone().to_account_info(),
-                to: ctx.accounts.user_ata.clone().to_account_info(),
-                authority: ctx.accounts.vault_manager.clone().to_account_info(),
-            };
-
-            // transfer prize from vault to winner
-            // TODO how to get all of prize?
-            token::transfer(
-                CpiContext::new_with_signer(
-                    ctx.accounts.token_program.clone().to_account_info(),
-                    prize_transfer_accounts,
-                    &[&[
-                        ctx.accounts.mint.key().as_ref(),
-                        ctx.accounts.vault.key().as_ref(),
-                        &[vault_mgr_bump],
-                    ]],
-                ),
-                1,
-            )?;
-        };
 
         let transfer_accounts = token::Transfer {
             from: ctx.accounts.vault.clone().to_account_info(),
@@ -193,29 +164,9 @@ pub mod no_loss_lottery {
         vault_mgr_bump: u8,
         _tickets_bump: u8,
     ) -> ProgramResult {
-        // check if winning PDA exists
-        let winning_numbers = ctx.accounts.vault_manager.winning_numbers;
-
-        // get ticket numbers from PDA passed in
-        let ticket_numbers = ctx.accounts.ticket.numbers;
-
-        // check if the numbers match the winning numbers
-        for (i, n) in winning_numbers.iter().enumerate() {
-            if n != &ticket_numbers[i] {
-                // reset winning_numbers
-                // reset draw time
-                return Err(ErrorCode::NoWinner.into());
-            }
-        }
-
-        // if winner found, end lottery
-        ctx.accounts.vault_manager.lottery_ended = true;
-
-        // set winner as ticket owner
-        ctx.accounts.vault_manager.winner = ctx.accounts.ticket.owner;
 
         let transfer_accounts = token::Transfer {
-            from: ctx.accounts.vault.clone().to_account_info(),
+            from: ctx.accounts.prize.clone().to_account_info(),
             to: ctx.accounts.user_ata.clone().to_account_info(),
             authority: ctx.accounts.vault_manager.clone().to_account_info(),
         };
