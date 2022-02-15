@@ -38,9 +38,16 @@ pub mod no_loss_lottery {
         _ticket_bump: u8,
         numbers: [u8; 6],
     ) -> ProgramResult {
+        // do not allow user to pass in zeroed array of numbers
+        if numbers == [0u8; 6] {
+            return Err(ErrorCode::InvalidNumbers.into());
+        }
+
+        // if buy is locked this means someone needs to call find
         if ctx.accounts.vault_manager.lock_buy {
             return Err(ErrorCode::CallFind.into());
         }
+
         // create ticket PDA data
         let ticket_account = &mut ctx.accounts.ticket;
         ticket_account.mint = ctx.accounts.mint.clone().key();
@@ -177,6 +184,16 @@ pub mod no_loss_lottery {
     ) -> ProgramResult {
         // unlock buy tickets
         ctx.accounts.vault_manager.lock_buy = false;
+
+        // zero out winning numbers
+        ctx.accounts.vault_manager.winning_numbers = [0u8; 6];
+
+        // if numbers are zero'd out this means this account was initialized in this transaction
+        // no winner found
+        if ctx.accounts.ticket.numbers == [0u8; 6] {
+            // we cannot error here because we need the variables to persist in the vault_manager account
+            return Ok(());
+        }
 
         let transfer_accounts = token::Transfer {
             from: ctx.accounts.prize.clone().to_account_info(),
@@ -389,7 +406,7 @@ pub struct Find<'info> {
     #[account(mut)]
     pub tickets: Account<'info, token::Mint>,
 
-    #[account(mut, seeds = [&numbers, vault_manager.key().as_ref()], bump = ticket_bump)]
+    #[account(init_if_needed, payer = user, seeds = [&numbers, vault_manager.key().as_ref()], bump = ticket_bump)]
     pub ticket: Box<Account<'info, Ticket>>,
 
     #[account(mut, has_one = mint)]
@@ -443,4 +460,7 @@ pub enum ErrorCode {
 
     #[msg("Must call Find")]
     CallFind,
+
+    #[msg("Invalid Numbers")]
+    InvalidNumbers,
 }
