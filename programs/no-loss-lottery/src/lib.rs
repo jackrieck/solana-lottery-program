@@ -454,15 +454,6 @@ pub enum ErrorCode {
     #[msg("TimeRemaining")]
     TimeRemaining,
 
-    #[msg("NoWinner")]
-    NoWinner,
-
-    #[msg("Lottery In Progress")]
-    LotteryInProgress,
-
-    #[msg("Unexpected Ticket")]
-    UnexpectedTicket,
-
     #[msg("Must call Find")]
     CallFind,
 
