@@ -82,20 +82,21 @@ pub mod no_loss_lottery {
         )
     }
 
-    pub fn withdraw(
-        ctx: Context<Withdraw>,
+    // redeem tickets for deposited tokens
+    pub fn redeem(
+        ctx: Context<Redeem>,
         _vault_bump: u8,
         vault_mgr_bump: u8,
         _tickets_bump: u8,
         _prize_bump: u8,
         amount: u64,
     ) -> ProgramResult {
-        // if lottery is still running, do not allow withdrawals
+        // if lottery is still running, you cannot redeem
         if !ctx.accounts.vault_manager.lottery_ended {
             return Err(ErrorCode::LotteryInProgress.into());
         };
 
-        // if winner withdraws, give them the prize!
+        // if winner redeems, give them the prize!
         if ctx.accounts.vault_manager.winner == ctx.accounts.user.key() {
             let prize_transfer_accounts = token::Transfer {
                 from: ctx.accounts.prize.clone().to_account_info(),
@@ -287,7 +288,7 @@ pub struct Buy<'info> {
 
 #[derive(Accounts)]
 #[instruction(vault_bump: u8, vault_mgr_bump: u8, tickets_bump: u8, prize_bump: u8)]
-pub struct Withdraw<'info> {
+pub struct Redeem<'info> {
     #[account(mut)]
     pub mint: Account<'info, token::Mint>,
 

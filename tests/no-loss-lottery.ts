@@ -188,8 +188,8 @@ describe("no-loss-lottery", () => {
       "minted 100 tokens to prize ata, dont actually do this in prod"
     );
 
-    // user withdraw tokens + any winnings
-    const withdrawTxSig = await program.rpc.withdraw(
+    // user redeem tokens + any winnings
+    const redeemTxSig = await program.rpc.redeem(
       vaultBump,
       vaultMgrBump,
       ticketsBump,
@@ -210,7 +210,7 @@ describe("no-loss-lottery", () => {
         },
       }
     );
-    console.log("withdrawTxSig:", withdrawTxSig);
+    console.log("redeemTxSig:", redeemTxSig);
   });
 });
 
