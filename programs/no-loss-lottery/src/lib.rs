@@ -92,7 +92,6 @@ pub mod no_loss_lottery {
         _ticket_bump: u8,
         _prize_bump: u8,
     ) -> ProgramResult {
-
         // burn a ticket from the user ATA
         let burn_accounts = token::Burn {
             mint: ctx.accounts.tickets.clone().to_account_info(),
@@ -164,6 +163,20 @@ pub mod no_loss_lottery {
         vault_mgr_bump: u8,
         _tickets_bump: u8,
     ) -> ProgramResult {
+        // check if winning PDA exists
+        let winning_numbers = ctx.accounts.vault_manager.winning_numbers;
+
+        // get ticket numbers from PDA passed in
+        let ticket_numbers = ctx.accounts.ticket.numbers;
+
+        // check if the numbers match the winning numbers
+        for (i, n) in winning_numbers.iter().enumerate() {
+            if n != &ticket_numbers[i] {
+                // reset winning_numbers
+                // reset draw time
+                return Err(ErrorCode::NoWinner.into());
+            }
+        }
 
         let transfer_accounts = token::Transfer {
             from: ctx.accounts.prize.clone().to_account_info(),
