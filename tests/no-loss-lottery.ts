@@ -193,15 +193,17 @@ describe("no-loss-lottery", () => {
       vaultBump,
       vaultMgrBump,
       ticketsBump,
+      ticketBump,
       prizeBump,
-      new anchor.BN(1),
       {
         accounts: {
           mint: mint.publicKey,
           vault: vault,
           vaultManager: vaultMgr,
           tickets: tickets,
+          ticket: ticket,
           prize: prize,
+          userTicketsAta: userTicketsAta,
           user: program.provider.wallet.publicKey,
           userAta: userAta.address,
           systemProgram: anchor.web3.SystemProgram.programId,
