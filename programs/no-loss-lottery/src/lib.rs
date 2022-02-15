@@ -276,7 +276,7 @@ pub struct Buy<'info> {
 
     #[account(init,
         payer = user,
-        seeds = [&numbers],
+        seeds = [&numbers, vault_manager.key().as_ref()],
         bump = ticket_bump,
     )]
     pub ticket: Box<Account<'info, Ticket>>,
@@ -395,7 +395,7 @@ pub struct Find<'info> {
     #[account(mut)]
     pub tickets: Account<'info, token::Mint>,
 
-    #[account(mut, seeds = [&numbers], bump = ticket_bump)]
+    #[account(mut, seeds = [&numbers, vault_manager.key().as_ref()], bump = ticket_bump)]
     pub ticket: Box<Account<'info, Ticket>>,
 
     #[account(mut, has_one = mint)]

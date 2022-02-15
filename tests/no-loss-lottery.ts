@@ -111,7 +111,7 @@ describe("no-loss-lottery", () => {
 
     // create ticket PDA
     const [ticket, ticketBump] = await anchor.web3.PublicKey.findProgramAddress(
-      [Uint8Array.from(numbers)],
+      [Uint8Array.from(numbers), vaultMgr.toBuffer()],
       program.programId
     );
 
@@ -169,15 +169,16 @@ describe("no-loss-lottery", () => {
     console.log(
       "minted 100 tokens to prize ata, dont actually do this in prod"
     );
-    
+
     // fetch winning numbers
-    const vaultMgrAccount = await program.account.vaultManager.fetch(vaultMgr)
+    const vaultMgrAccount = await program.account.vaultManager.fetch(vaultMgr);
 
     // create winning ticket PDA
-    const [winningTicket, winningTicketBump] = await anchor.web3.PublicKey.findProgramAddress(
-      [Uint8Array.from(vaultMgrAccount.winningNumbers)],
-      program.programId
-    );
+    const [winningTicket, winningTicketBump] =
+      await anchor.web3.PublicKey.findProgramAddress(
+        [Uint8Array.from(vaultMgrAccount.winningNumbers), vaultMgr.toBuffer()],
+        program.programId
+      );
 
     // find winner
     const findTxSig = await program.rpc.find(
