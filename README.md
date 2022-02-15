@@ -28,6 +28,7 @@ No-loss lottery: Build a platform for users to deposit a variety of tokens into 
 - close accounts after
 - draw cadence instead of draw time
 - what happens if winner never claims?
+- buy and redeem multiple tickets at once
 
 #### Solve
 
