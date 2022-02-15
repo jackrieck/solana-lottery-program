@@ -115,7 +115,9 @@ pub mod no_loss_lottery {
 
         // close ticket PDA
         // return SOL to user
-        ctx.accounts.ticket.close(ctx.accounts.user.clone().to_account_info())?;
+        ctx.accounts
+            .ticket
+            .close(ctx.accounts.user.clone().to_account_info())?;
 
         // if winner redeems, give them the prize!
         // TODO: mark winner as received prize
