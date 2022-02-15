@@ -38,6 +38,9 @@ pub mod no_loss_lottery {
         _ticket_bump: u8,
         numbers: [u8; 6],
     ) -> ProgramResult {
+        if ctx.accounts.vault_manager.lock_buy {
+            return Err(ErrorCode::CallFind.into());
+        }
         // create ticket PDA data
         let ticket_account = &mut ctx.accounts.ticket;
         ticket_account.mint = ctx.accounts.mint.clone().key();
@@ -154,6 +157,9 @@ pub mod no_loss_lottery {
 
         // set numbers in vault_manager account
         ctx.accounts.vault_manager.winning_numbers = numbers;
+
+        // lock `buy` function until `find` called
+        ctx.accounts.vault_manager.lock_buy = true;
         Ok(())
     }
 
@@ -169,20 +175,8 @@ pub mod no_loss_lottery {
         _numbers: [u8; 6],
         _ticket_bump: u8,
     ) -> ProgramResult {
-        //// check if winning PDA exists
-        //let winning_numbers = ctx.accounts.vault_manager.winning_numbers;
-
-        //// get ticket numbers from PDA passed in
-        //let ticket_numbers = ctx.accounts.ticket.numbers;
-
-        //// check if the numbers match the winning numbers
-        //for (i, n) in winning_numbers.iter().enumerate() {
-        //    if n != &ticket_numbers[i] {
-        //        // reset winning_numbers
-        //        // reset draw time
-        //        return Err(ErrorCode::NoWinner.into());
-        //    }
-        //}
+        // unlock buy tickets
+        ctx.accounts.vault_manager.lock_buy = false;
 
         let transfer_accounts = token::Transfer {
             from: ctx.accounts.prize.clone().to_account_info(),
@@ -420,6 +414,7 @@ pub struct VaultManager {
     pub draw_time: i64, // in ms, lottery end time
     pub ticket_price: u64,
     pub winning_numbers: [u8; 6],
+    pub lock_buy: bool, // lock buy in draw, unlock buy after find
 }
 
 #[account]
@@ -445,4 +440,7 @@ pub enum ErrorCode {
 
     #[msg("Unexpected Ticket")]
     UnexpectedTicket,
+
+    #[msg("Must call Find")]
+    CallFind,
 }
