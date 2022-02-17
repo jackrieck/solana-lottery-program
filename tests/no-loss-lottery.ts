@@ -13,7 +13,7 @@ const PRIZE = "PRIZE";
 const USER_MINT_ATA = "USER_MINT_ATA";
 const USER_TICKET_ATA = "USER_TICKET_ATA";
 
-const DRAW_MS = 1 * 1000;
+const DRAW_SECONDS = 1;
 
 interface Config {
   keys: Map<String, anchor.web3.PublicKey>;
@@ -139,14 +139,9 @@ describe("Buy", () => {
 
     const [ticket, ticketBump] = await buy(program, numbers, config, null);
 
-    // fetch winning numbers
-    const vaultMgrAccount2 = await program.account.vaultManager.fetch(
-      config.keys.get(VAULT_MANAGER)
-    );
-    console.log(vaultMgrAccount2.cutoffTime.toNumber());
-
     // wait for draw to expire
-    await sleep(DRAW_MS + 500);
+    // adding seconds with MS
+    await sleep(DRAW_SECONDS + 500);
 
     // draw winner
     const drawTxSig = await program.rpc.draw(
@@ -377,7 +372,7 @@ async function initialize(
     vaultMgrBump,
     ticketsBump,
     prizeBump,
-    new anchor.BN(DRAW_MS),
+    new anchor.BN(DRAW_SECONDS),
     ticketPrice,
     {
       accounts: {

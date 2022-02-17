@@ -45,8 +45,7 @@ pub mod no_loss_lottery {
             let now = Clock::get()?.unix_timestamp;
 
             // set last draw time to now
-            //ctx.accounts.vault_manager.cutoff_time = now + ctx.accounts.vault_manager.draw_duration;
-            ctx.accounts.vault_manager.cutoff_time = ctx.accounts.vault_manager.draw_duration;
+            ctx.accounts.vault_manager.cutoff_time = now + ctx.accounts.vault_manager.draw_duration;
         };
 
         // do not allow user to pass in zeroed array of numbers
@@ -450,8 +449,8 @@ pub struct VaultManager {
     pub mint: Pubkey,
     pub vault: Pubkey,
     pub tickets: Pubkey,
-    pub cutoff_time: i64,   // in ms, last time draw was called
-    pub draw_duration: i64, // in ms, lottery end time
+    pub cutoff_time: i64,   // in seconds, cutoff time for next draw 
+    pub draw_duration: i64, // in seconds, lottery end time
     pub ticket_price: u64,
     pub winning_numbers: [u8; 6],
     pub lock_buy: bool, // lock buy in draw, unlock buy after find
