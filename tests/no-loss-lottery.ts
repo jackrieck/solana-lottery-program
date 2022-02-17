@@ -293,7 +293,7 @@ describe("Redeem", () => {
 // create new Account and seed with lamports
 async function newAccountWithLamports(
   connection: anchor.web3.Connection,
-  lamports: number = 100_000_000_000_000
+  lamports: number = 100_000_000
 ): Promise<anchor.web3.Account> {
   // generate keypair
   const account = new anchor.web3.Account();
@@ -303,10 +303,14 @@ async function newAccountWithLamports(
   await connection.confirmTransaction(txSig);
   console.log("airdropTxSig:", txSig);
 
+  // check account balance
+  const lamportsBalance = await connection.getBalance(account.publicKey);
+  console.log("lamports balance:", lamportsBalance);
+
   return account;
 }
 
-// slep current thread in milliseconds
+// sleep current thread in milliseconds
 async function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
