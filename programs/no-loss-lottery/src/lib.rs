@@ -16,12 +16,13 @@ pub mod no_loss_lottery {
         _vault_mgr_bump: u8,
         _tickets_bump: u8,
         _prize_bump: u8,
-        draw_time: i64,
+        draw_duration: i64,
         ticket_price: u64,
     ) -> ProgramResult {
         // set vault manager config
         let vault_mgr = &mut ctx.accounts.vault_manager;
-        vault_mgr.draw_time = draw_time;
+        vault_mgr.draw_duration = draw_duration;
+        vault_mgr.cutoff_time = 0;
         vault_mgr.ticket_price = ticket_price;
         vault_mgr.mint = ctx.accounts.mint.clone().key();
         vault_mgr.vault = ctx.accounts.vault.clone().key();
@@ -38,6 +39,16 @@ pub mod no_loss_lottery {
         _ticket_bump: u8,
         numbers: [u8; 6],
     ) -> ProgramResult {
+        // if cutoff_time is 0, drawing has never started
+        if ctx.accounts.vault_manager.cutoff_time == 0 {
+            // get current timestamp from Clock program
+            let now = Clock::get()?.unix_timestamp;
+
+            // set last draw time to now
+            //ctx.accounts.vault_manager.cutoff_time = now + ctx.accounts.vault_manager.draw_duration;
+            ctx.accounts.vault_manager.cutoff_time = ctx.accounts.vault_manager.draw_duration;
+        };
+
         // do not allow user to pass in zeroed array of numbers
         if numbers == [0u8; 6] {
             return Err(ErrorCode::InvalidNumbers.into());
@@ -155,7 +166,7 @@ pub mod no_loss_lottery {
         let now = Clock::get()?.unix_timestamp;
 
         // if time remaining then error
-        if now < ctx.accounts.vault_manager.draw_time {
+        if now < ctx.accounts.vault_manager.cutoff_time {
             return Err(ErrorCode::TimeRemaining.into());
         }
 
@@ -182,6 +193,12 @@ pub mod no_loss_lottery {
         _numbers: [u8; 6],
         _ticket_bump: u8,
     ) -> ProgramResult {
+        // get current timestamp from Clock program
+        let now = Clock::get()?.unix_timestamp;
+
+        // set next cutoff time
+        ctx.accounts.vault_manager.cutoff_time = now + ctx.accounts.vault_manager.draw_duration;
+
         // unlock buy tickets
         ctx.accounts.vault_manager.lock_buy = false;
 
@@ -433,7 +450,8 @@ pub struct VaultManager {
     pub mint: Pubkey,
     pub vault: Pubkey,
     pub tickets: Pubkey,
-    pub draw_time: i64, // in ms, lottery end time
+    pub cutoff_time: i64,   // in ms, last time draw was called
+    pub draw_duration: i64, // in ms, lottery end time
     pub ticket_price: u64,
     pub winning_numbers: [u8; 6],
     pub lock_buy: bool, // lock buy in draw, unlock buy after find

@@ -139,6 +139,12 @@ describe("Buy", () => {
 
     const [ticket, ticketBump] = await buy(program, numbers, config, null);
 
+    // fetch winning numbers
+    const vaultMgrAccount2 = await program.account.vaultManager.fetch(
+      config.keys.get(VAULT_MANAGER)
+    );
+    console.log(vaultMgrAccount2.cutoffTime.toNumber());
+
     // wait for draw to expire
     await sleep(DRAW_MS + 500);
 
@@ -362,10 +368,6 @@ async function initialize(
     program.programId
   );
 
-  // lottery draw timestamp (future)
-  const now = new Date().getTime();
-  const drawTime = new anchor.BN(new Date(now + DRAW_MS).getTime() / 1000);
-
   // ticket price in tokens
   const ticketPrice = new anchor.BN(1);
 
@@ -375,7 +377,7 @@ async function initialize(
     vaultMgrBump,
     ticketsBump,
     prizeBump,
-    drawTime,
+    new anchor.BN(DRAW_MS),
     ticketPrice,
     {
       accounts: {
