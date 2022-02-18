@@ -172,7 +172,7 @@ pub mod no_loss_lottery {
         // if locked, dont call draw
         if ctx.accounts.vault_manager.lock {
             return Err(ErrorCode::CallFind.into());
-        } 
+        }
 
         let now = get_current_time();
 
