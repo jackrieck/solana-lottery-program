@@ -496,12 +496,9 @@ pub enum ErrorCode {
 
     #[msg("No Tickets Purchased")]
     NoTicketsPurchased,
-<<<<<<< HEAD
 
     #[msg("Must Pass in Winning PDA to Find")]
     PassInWinningPDA,
-=======
->>>>>>> remotes/origin/main
 }
 
 fn get_current_time() -> u64 {

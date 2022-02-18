@@ -13,11 +13,8 @@ const PRIZE = "PRIZE";
 const USER_DEPOSIT_ATA = "USER_DEPOSIT_ATA";
 const USER_TICKET_ATA = "USER_TICKET_ATA";
 
-<<<<<<< HEAD
 const PRIZE_AMOUNT = 100;
 
-=======
->>>>>>> remotes/origin/main
 interface Config {
   keys: Map<String, anchor.web3.PublicKey>;
   bumps: Map<String, number>;
@@ -569,12 +566,7 @@ async function sleep(seconds: number) {
 async function initialize(
   program: Program<NoLossLottery>,
   drawDurationSeconds: number,
-<<<<<<< HEAD
-  userDepositAtaBalance = 100,
-
-=======
-  userAtaBalance = 100
->>>>>>> remotes/origin/main
+  userDepositAtaBalance = 100
 ): Promise<Config> {
   const mintAuthority = await newAccountWithLamports(
     program.provider.connection
@@ -819,7 +811,6 @@ async function draw(
   }
 }
 
-<<<<<<< HEAD
 async function find(
   program: Program<NoLossLottery>,
   config: Config,
@@ -873,8 +864,6 @@ async function find(
   }
 }
 
-=======
->>>>>>> remotes/origin/main
 async function assertBalance(
   program: Program<NoLossLottery>,
   account: anchor.web3.PublicKey,
