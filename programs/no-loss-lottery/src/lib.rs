@@ -55,7 +55,7 @@ pub mod no_loss_lottery {
         }
 
         // if buy is locked this means someone needs to call find
-        if ctx.accounts.vault_manager.lock_buy {
+        if ctx.accounts.vault_manager.lock {
             return Err(ErrorCode::CallFind.into());
         }
 
@@ -169,6 +169,11 @@ pub mod no_loss_lottery {
             return Err(ErrorCode::NoTicketsPurchased.into());
         }
 
+        // if locked, dont call draw
+        if ctx.accounts.vault_manager.lock {
+            return Err(ErrorCode::CallFind.into());
+        } 
+
         let now = get_current_time();
 
         // if time remaining then error
@@ -183,7 +188,7 @@ pub mod no_loss_lottery {
         ctx.accounts.vault_manager.winning_numbers = numbers;
 
         // lock `buy` function until `find` called
-        ctx.accounts.vault_manager.lock_buy = true;
+        ctx.accounts.vault_manager.lock = true;
         Ok(())
     }
 
@@ -206,7 +211,7 @@ pub mod no_loss_lottery {
         ctx.accounts.vault_manager.cutoff_time = now + ctx.accounts.vault_manager.draw_duration;
 
         // unlock buy tickets
-        ctx.accounts.vault_manager.lock_buy = false;
+        ctx.accounts.vault_manager.lock = false;
 
         // zero out winning numbers
         ctx.accounts.vault_manager.winning_numbers = [0u8; 6];
@@ -460,7 +465,7 @@ pub struct VaultManager {
     pub draw_duration: u64, // in seconds, lottery end time
     pub ticket_price: u64,
     pub winning_numbers: [u8; 6],
-    pub lock_buy: bool, // lock buy in draw, unlock buy after find
+    pub lock: bool, // lock buy in draw, unlock buy after find
 }
 
 #[account]

@@ -348,6 +348,45 @@ describe("Draw", () => {
 
     await draw(program, config, program.idl.errors[0].code);
   });
+
+  it("Draw multiple times", async () => {
+    const drawDurationSeconds = 1;
+
+    const config = await initialize(program, drawDurationSeconds, 1);
+
+    // choose your lucky numbers!
+    const numbers = [1, 2, 3, 4, 5, 6];
+
+    await buy(program, numbers, config, null);
+
+    // wait for cutoff_time to expire
+    await sleep(drawDurationSeconds + 1);
+
+    await draw(program, config, null);
+    await draw(program, config, program.idl.errors[1].code);
+  });
+
+  it("Attempt to buy ticket between draw and find", async () => {
+    const drawDurationSeconds = 1;
+
+    const config = await initialize(program, drawDurationSeconds, 1);
+
+    // choose your lucky numbers!
+    const numbers1 = [1, 2, 3, 4, 5, 6];
+
+    await buy(program, numbers1, config, null);
+
+    // wait for cutoff_time to expire
+    await sleep(drawDurationSeconds + 1);
+
+    await draw(program, config, null);
+
+    // choose your lucky numbers!
+    const numbers2 = [1, 2, 3, 4, 5, 7];
+
+    // call buy without calling find
+    await buy(program, numbers2, config, program.idl.errors[1].code);
+  });
 });
 
 // create new Account and seed with lamports
