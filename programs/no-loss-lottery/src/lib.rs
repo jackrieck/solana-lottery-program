@@ -462,10 +462,10 @@ pub struct VaultManager {
     pub vault: Pubkey,
     pub tickets: Pubkey,
     pub cutoff_time: u64,   // in seconds, cutoff time for next draw
-    pub draw_duration: u64, // in seconds, lottery end time
+    pub draw_duration: u64, // in seconds, duration until next draw time
     pub ticket_price: u64,
     pub winning_numbers: [u8; 6],
-    pub lock: bool, // lock buy in draw, unlock buy after find
+    pub lock: bool, // when draw is called, lock the vault
 }
 
 #[account]

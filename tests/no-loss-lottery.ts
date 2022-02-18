@@ -409,7 +409,7 @@ async function newAccountWithLamports(
   return account;
 }
 
-// sleep current thread in milliseconds
+// sleep current thread in seconds
 async function sleep(seconds: number) {
   const ms = seconds * 1000;
   return new Promise((resolve) => setTimeout(resolve, ms));
