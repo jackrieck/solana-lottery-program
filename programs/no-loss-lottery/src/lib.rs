@@ -239,7 +239,7 @@ pub mod no_loss_lottery {
         };
 
         // transfer prize to winner
-        match token::transfer(
+        token::transfer(
             CpiContext::new_with_signer(
                 ctx.accounts.token_program.clone().to_account_info(),
                 transfer_accounts,
@@ -250,10 +250,7 @@ pub mod no_loss_lottery {
                 ]],
             ),
             ctx.accounts.prize.amount,
-        ) {
-            Ok(_) => return Ok(()),
-            Err(e) => return Ok(()),
-        }
+        )
     }
 }
 
