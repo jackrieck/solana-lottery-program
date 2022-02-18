@@ -69,7 +69,7 @@ pub mod no_loss_lottery {
 
         // transfer tokens from user wallet to vault
         let transfer_accounts = token::Transfer {
-            from: ctx.accounts.user_ata.clone().to_account_info(),
+            from: ctx.accounts.user_deposit_ata.clone().to_account_info(),
             to: ctx.accounts.vault.clone().to_account_info(),
             authority: ctx.accounts.user.clone().to_account_info(),
         };
@@ -137,7 +137,7 @@ pub mod no_loss_lottery {
 
         let transfer_accounts = token::Transfer {
             from: ctx.accounts.vault.clone().to_account_info(),
-            to: ctx.accounts.user_ata.clone().to_account_info(),
+            to: ctx.accounts.user_deposit_ata.clone().to_account_info(),
             authority: ctx.accounts.vault_manager.clone().to_account_info(),
         };
 
@@ -201,9 +201,15 @@ pub mod no_loss_lottery {
         _vault_bump: u8,
         vault_mgr_bump: u8,
         _tickets_bump: u8,
-        _numbers: [u8; 6],
+        numbers: [u8; 6],
         _ticket_bump: u8,
     ) -> ProgramResult {
+
+        // crank must pass in winning PDA
+        if numbers != ctx.accounts.vault_manager.winning_numbers {
+            return Err(ErrorCode::PassInWinningPDA.into());
+        }
+
         let now = get_current_time();
 
         // set next cutoff time
@@ -229,7 +235,7 @@ pub mod no_loss_lottery {
 
         let transfer_accounts = token::Transfer {
             from: ctx.accounts.prize.clone().to_account_info(),
-            to: ctx.accounts.user_ata.clone().to_account_info(),
+            to: ctx.accounts.user_deposit_ata.clone().to_account_info(),
             authority: ctx.accounts.vault_manager.clone().to_account_info(),
         };
 
@@ -334,7 +340,7 @@ pub struct Buy<'info> {
     pub user: Signer<'info>,
 
     #[account(mut, has_one = mint)]
-    pub user_ata: Account<'info, token::TokenAccount>,
+    pub user_deposit_ata: Account<'info, token::TokenAccount>,
 
     pub system_program: Program<'info, System>,
     pub token_program: Program<'info, token::Token>,
@@ -379,7 +385,7 @@ pub struct Redeem<'info> {
     pub user: Signer<'info>,
 
     #[account(mut, has_one = mint)]
-    pub user_ata: Account<'info, token::TokenAccount>,
+    pub user_deposit_ata: Account<'info, token::TokenAccount>,
 
     pub system_program: Program<'info, System>,
     pub token_program: Program<'info, token::Token>,
@@ -448,7 +454,7 @@ pub struct Find<'info> {
     pub user: Signer<'info>,
 
     #[account(mut, has_one = mint)]
-    pub user_ata: Account<'info, token::TokenAccount>,
+    pub user_deposit_ata: Account<'info, token::TokenAccount>,
 
     pub system_program: Program<'info, System>,
     pub token_program: Program<'info, token::Token>,
@@ -490,6 +496,9 @@ pub enum ErrorCode {
 
     #[msg("No Tickets Purchased")]
     NoTicketsPurchased,
+
+    #[msg("Must Pass in Winning PDA to Find")]
+    PassInWinningPDA,
 }
 
 fn get_current_time() -> u64 {
