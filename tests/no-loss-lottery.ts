@@ -13,8 +13,11 @@ const PRIZE = "PRIZE";
 const USER_DEPOSIT_ATA = "USER_DEPOSIT_ATA";
 const USER_TICKET_ATA = "USER_TICKET_ATA";
 
+<<<<<<< HEAD
 const PRIZE_AMOUNT = 100;
 
+=======
+>>>>>>> remotes/origin/main
 interface Config {
   keys: Map<String, anchor.web3.PublicKey>;
   bumps: Map<String, number>;
@@ -454,6 +457,89 @@ describe("Find", () => {
   });
 });
 
+describe("Draw", () => {
+  // Configure the client to use the local cluster.
+  anchor.setProvider(anchor.Provider.env());
+
+  const program = anchor.workspace.NoLossLottery as Program<NoLossLottery>;
+
+  it("Draw numbers", async () => {
+    const drawDurationSeconds = 1;
+
+    const config = await initialize(program, drawDurationSeconds, 1);
+
+    // choose your lucky numbers!
+    const numbers = [1, 2, 3, 4, 5, 6];
+
+    const [ticket, ticketBump] = await buy(program, numbers, config, null);
+
+    // wait for cutoff_time to expire
+    await sleep(drawDurationSeconds + 1);
+
+    await draw(program, config, null);
+  });
+
+  it("Draw without any tickets purchased", async () => {
+    const drawDurationSeconds = 1;
+
+    const config = await initialize(program, drawDurationSeconds, 1);
+
+    await draw(program, config, program.idl.errors[3].code);
+  });
+
+  it("Draw before cutoff_time", async () => {
+    const drawDurationSeconds = 1;
+
+    const config = await initialize(program, drawDurationSeconds, 1);
+
+    // choose your lucky numbers!
+    const numbers = [1, 2, 3, 4, 5, 6];
+
+    await buy(program, numbers, config, null);
+
+    await draw(program, config, program.idl.errors[0].code);
+  });
+
+  it("Draw multiple times", async () => {
+    const drawDurationSeconds = 1;
+
+    const config = await initialize(program, drawDurationSeconds, 1);
+
+    // choose your lucky numbers!
+    const numbers = [1, 2, 3, 4, 5, 6];
+
+    await buy(program, numbers, config, null);
+
+    // wait for cutoff_time to expire
+    await sleep(drawDurationSeconds + 1);
+
+    await draw(program, config, null);
+    await draw(program, config, program.idl.errors[1].code);
+  });
+
+  it("Attempt to buy ticket between draw and find", async () => {
+    const drawDurationSeconds = 1;
+
+    const config = await initialize(program, drawDurationSeconds, 1);
+
+    // choose your lucky numbers!
+    const numbers1 = [1, 2, 3, 4, 5, 6];
+
+    await buy(program, numbers1, config, null);
+
+    // wait for cutoff_time to expire
+    await sleep(drawDurationSeconds + 1);
+
+    await draw(program, config, null);
+
+    // choose your lucky numbers!
+    const numbers2 = [1, 2, 3, 4, 5, 7];
+
+    // call buy without calling find
+    await buy(program, numbers2, config, program.idl.errors[1].code);
+  });
+});
+
 // create new Account and seed with lamports
 async function newAccountWithLamports(
   connection: anchor.web3.Connection,
@@ -483,8 +569,12 @@ async function sleep(seconds: number) {
 async function initialize(
   program: Program<NoLossLottery>,
   drawDurationSeconds: number,
+<<<<<<< HEAD
   userDepositAtaBalance = 100,
 
+=======
+  userAtaBalance = 100
+>>>>>>> remotes/origin/main
 ): Promise<Config> {
   const mintAuthority = await newAccountWithLamports(
     program.provider.connection
@@ -729,6 +819,7 @@ async function draw(
   }
 }
 
+<<<<<<< HEAD
 async function find(
   program: Program<NoLossLottery>,
   config: Config,
@@ -782,6 +873,8 @@ async function find(
   }
 }
 
+=======
+>>>>>>> remotes/origin/main
 async function assertBalance(
   program: Program<NoLossLottery>,
   account: anchor.web3.PublicKey,
