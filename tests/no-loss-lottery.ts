@@ -192,8 +192,8 @@ describe("Buy", () => {
         program.programId
       );
 
-    // find winner
-    const findTxSig = await program.rpc.find(
+    // dispense prize to winner
+    const dispenseTxSig = await program.rpc.dispense(
       config.bumps.get(VAULT),
       config.bumps.get(VAULT_MANAGER),
       config.bumps.get(TICKETS),
@@ -214,7 +214,7 @@ describe("Buy", () => {
         },
       }
     );
-    console.log("findTxSig:", findTxSig);
+    console.log("dispsenseTxSig:", dispenseTxSig);
 
     // user redeem tokens + any winnings
     const redeemTxSig = await program.rpc.redeem(
@@ -368,7 +368,7 @@ describe("Draw", () => {
     await draw(program, config, program.idl.errors[1].code);
   });
 
-  it("Attempt to buy ticket between draw and find", async () => {
+  it("Attempt to buy ticket between draw and dispense", async () => {
     const drawDurationSeconds = 1;
 
     const config = await initialize(program, drawDurationSeconds, 1);
@@ -386,16 +386,16 @@ describe("Draw", () => {
     // choose your lucky numbers!
     const numbers2 = [1, 2, 3, 4, 5, 7];
 
-    // call buy without calling find
+    // call buy without calling dispense
     await buy(program, numbers2, config, program.idl.errors[1].code);
   });
 });
 
-describe("Find", () => {
+describe("Dispense", () => {
   anchor.setProvider(anchor.Provider.env());
   const program = anchor.workspace.NoLossLottery as Program<NoLossLottery>;
 
-  it("Call find after draw, winner found", async () => {
+  it("Call dispense after draw, winner found", async () => {
     const drawDurationSeconds = 1;
 
     const config = await initialize(program, drawDurationSeconds, 1);
@@ -408,15 +408,23 @@ describe("Find", () => {
 
     await draw(program, config, null);
 
-    await find(program, config, null);
+    await dispense(program, config, null);
 
-    await assertBalance(program, config.keys.get(USER_DEPOSIT_ATA), PRIZE_AMOUNT);
+    await assertBalance(
+      program,
+      config.keys.get(USER_DEPOSIT_ATA),
+      PRIZE_AMOUNT
+    );
   });
 
-  it("Call find after draw, no winner", async () => {
+  it("Call dispense after draw, no winner", async () => {
     const drawDurationSeconds = 1;
     const userDepositAtaBalance = 10;
-    const config = await initialize(program, drawDurationSeconds, userDepositAtaBalance);
+    const config = await initialize(
+      program,
+      drawDurationSeconds,
+      userDepositAtaBalance
+    );
 
     // deliberatly choose a non winning combination
     const numbers = [7, 8, 9, 10, 11, 12];
@@ -428,17 +436,25 @@ describe("Find", () => {
 
     await draw(program, config, null);
 
-    await find(program, config, null);
+    await dispense(program, config, null);
 
     await assertBalance(program, config.keys.get(USER_TICKET_ATA), 1);
     // subtract 1 to account for a ticket purchase
-    await assertBalance(program, config.keys.get(USER_DEPOSIT_ATA), userDepositAtaBalance - 1);
+    await assertBalance(
+      program,
+      config.keys.get(USER_DEPOSIT_ATA),
+      userDepositAtaBalance - 1
+    );
   });
 
-  it("Call find with no draw", async () => {
+  it("Call dispense with no draw", async () => {
     const drawDurationSeconds = 1;
     const userDepositAtaBalance = 10;
-    const config = await initialize(program, drawDurationSeconds, userDepositAtaBalance);
+    const config = await initialize(
+      program,
+      drawDurationSeconds,
+      userDepositAtaBalance
+    );
 
     // deliberatly choose a non winning combination
     const numbers = [7, 8, 9, 10, 11, 12];
@@ -448,9 +464,13 @@ describe("Find", () => {
     // wait for cutoff_time to expire
     await sleep(drawDurationSeconds + 1);
 
-    await find(program, config, null);
-    
-    await assertBalance(program, config.keys.get(USER_DEPOSIT_ATA), userDepositAtaBalance - 1);
+    await dispense(program, config, null);
+
+    await assertBalance(
+      program,
+      config.keys.get(USER_DEPOSIT_ATA),
+      userDepositAtaBalance - 1
+    );
   });
 });
 
@@ -514,7 +534,7 @@ describe("Draw", () => {
     await draw(program, config, program.idl.errors[1].code);
   });
 
-  it("Attempt to buy ticket between draw and find", async () => {
+  it("Attempt to buy ticket between draw and dispense", async () => {
     const drawDurationSeconds = 1;
 
     const config = await initialize(program, drawDurationSeconds, 1);
@@ -532,7 +552,7 @@ describe("Draw", () => {
     // choose your lucky numbers!
     const numbers2 = [1, 2, 3, 4, 5, 7];
 
-    // call buy without calling find
+    // call buy without calling dispense
     await buy(program, numbers2, config, program.idl.errors[1].code);
   });
 });
@@ -662,7 +682,10 @@ async function initialize(
 
   // mint tokens to prize for testing
   await mint.mintTo(prize, mintAuthority.publicKey, [], PRIZE_AMOUNT);
-  console.log("minted %d tokens to prize ata, dont actually do this in prod", PRIZE_AMOUNT);
+  console.log(
+    "minted %d tokens to prize ata, dont actually do this in prod",
+    PRIZE_AMOUNT
+  );
 
   let keys = new Map<String, anchor.web3.PublicKey>();
   keys.set(VAULT, vault);
@@ -811,7 +834,7 @@ async function draw(
   }
 }
 
-async function find(
+async function dispense(
   program: Program<NoLossLottery>,
   config: Config,
   error = null
@@ -832,8 +855,8 @@ async function find(
         program.programId
       );
 
-    // find winner
-    const findTxSig = await program.rpc.find(
+    // dispense prize to winner
+    const dispenseTxSig = await program.rpc.dispense(
       config.bumps.get(VAULT),
       config.bumps.get(VAULT_MANAGER),
       config.bumps.get(TICKETS),
@@ -854,7 +877,7 @@ async function find(
         },
       }
     );
-    console.log("findTxSig:", findTxSig);
+    console.log("dispenseTxSig:", dispenseTxSig);
   } catch (e) {
     if (error) {
       assert.equal(e.code, error);

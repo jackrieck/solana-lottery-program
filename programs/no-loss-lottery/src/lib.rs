@@ -56,7 +56,7 @@ pub mod no_loss_lottery {
 
         // if buy is locked, call find
         if ctx.accounts.vault_manager.locked {
-            return Err(ErrorCode::CallFind.into());
+            return Err(ErrorCode::CallDispense.into());
         }
 
         // create ticket PDA data
@@ -171,7 +171,7 @@ pub mod no_loss_lottery {
 
         // if locked, dont call draw
         if ctx.accounts.vault_manager.locked {
-            return Err(ErrorCode::CallFind.into());
+            return Err(ErrorCode::CallDispense.into());
         }
 
         let now = get_current_time();
@@ -196,15 +196,14 @@ pub mod no_loss_lottery {
     // force passing in the winning numbers PDA
     // if PDA exists, send prize
     // if not error
-    pub fn find(
-        ctx: Context<Find>,
+    pub fn dispense(
+        ctx: Context<Dispense>,
         _vault_bump: u8,
         vault_mgr_bump: u8,
         _tickets_bump: u8,
         numbers: [u8; 6],
         _ticket_bump: u8,
     ) -> ProgramResult {
-
         // crank must pass in winning PDA
         if numbers != ctx.accounts.vault_manager.winning_numbers {
             return Err(ErrorCode::PassInWinningPDA.into());
@@ -424,7 +423,7 @@ pub struct Draw<'info> {
 
 #[derive(Accounts)]
 #[instruction(vault_bump: u8, vault_mgr_bump: u8, tickets_bump: u8, numbers: [u8; 6], ticket_bump: u8)]
-pub struct Find<'info> {
+pub struct Dispense<'info> {
     #[account(mut)]
     pub mint: Account<'info, token::Mint>,
 
@@ -470,7 +469,7 @@ pub struct VaultManager {
     pub draw_duration: u64, // in seconds, duration until next draw time
     pub ticket_price: u64,
     pub winning_numbers: [u8; 6],
-    pub locked: bool, // when draw is called, lock the program until Find is called
+    pub locked: bool, // when draw is called, lock the program until Dispense is called
 }
 
 #[account]
@@ -488,8 +487,8 @@ pub enum ErrorCode {
     #[msg("TimeRemaining")]
     TimeRemaining,
 
-    #[msg("Must call Find")]
-    CallFind,
+    #[msg("Must call Dispense")]
+    CallDispense,
 
     #[msg("Invalid Numbers")]
     InvalidNumbers,
@@ -497,7 +496,7 @@ pub enum ErrorCode {
     #[msg("No Tickets Purchased")]
     NoTicketsPurchased,
 
-    #[msg("Must Pass in Winning PDA to Find")]
+    #[msg("Must Pass in Winning PDA to Dispense")]
     PassInWinningPDA,
 }
 
