@@ -54,8 +54,8 @@ pub mod no_loss_lottery {
             return Err(ErrorCode::InvalidNumbers.into());
         }
 
-        // if buy is locked this means someone needs to call find
-        if ctx.accounts.vault_manager.lock {
+        // if buy is locked, call find
+        if ctx.accounts.vault_manager.locked {
             return Err(ErrorCode::CallFind.into());
         }
 
@@ -170,7 +170,7 @@ pub mod no_loss_lottery {
         }
 
         // if locked, dont call draw
-        if ctx.accounts.vault_manager.lock {
+        if ctx.accounts.vault_manager.locked {
             return Err(ErrorCode::CallFind.into());
         }
 
@@ -187,8 +187,8 @@ pub mod no_loss_lottery {
         // set numbers in vault_manager account
         ctx.accounts.vault_manager.winning_numbers = numbers;
 
-        // lock `buy` function until `find` called
-        ctx.accounts.vault_manager.lock = true;
+        // locked `buy` function until `find` called
+        ctx.accounts.vault_manager.locked = true;
         Ok(())
     }
 
@@ -204,14 +204,13 @@ pub mod no_loss_lottery {
         _numbers: [u8; 6],
         _ticket_bump: u8,
     ) -> ProgramResult {
-        // get current timestamp from Clock program
         let now = get_current_time();
 
         // set next cutoff time
         ctx.accounts.vault_manager.cutoff_time = now + ctx.accounts.vault_manager.draw_duration;
 
         // unlock buy tickets
-        ctx.accounts.vault_manager.lock = false;
+        ctx.accounts.vault_manager.locked = false;
 
         // zero out winning numbers
         ctx.accounts.vault_manager.winning_numbers = [0u8; 6];
@@ -465,7 +464,7 @@ pub struct VaultManager {
     pub draw_duration: u64, // in seconds, duration until next draw time
     pub ticket_price: u64,
     pub winning_numbers: [u8; 6],
-    pub lock: bool, // when draw is called, lock the vault
+    pub locked: bool, // when draw is called, lock the program until Find is called
 }
 
 #[account]
