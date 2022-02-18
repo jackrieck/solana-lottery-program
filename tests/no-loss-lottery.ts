@@ -408,7 +408,7 @@ describe("Dispense", () => {
 
     await draw(program, config, null);
 
-    await dispense(program, config, null);
+    await dispense(program, config, numbers, null);
 
     await assertBalance(
       program,
@@ -436,7 +436,7 @@ describe("Dispense", () => {
 
     await draw(program, config, null);
 
-    await dispense(program, config, null);
+    await dispense(program, config, numbers, program.idl.errors[4].code);
 
     await assertBalance(program, config.keys.get(USER_TICKET_ATA), 1);
     // subtract 1 to account for a ticket purchase
@@ -464,7 +464,83 @@ describe("Dispense", () => {
     // wait for cutoff_time to expire
     await sleep(drawDurationSeconds + 1);
 
-    await dispense(program, config, null);
+    await dispense(program, config, numbers, program.idl.errors[4].code);
+
+    await assertBalance(
+      program,
+      config.keys.get(USER_DEPOSIT_ATA),
+      userDepositAtaBalance - 1
+    );
+  });
+
+  it("Call dispense twice in a row without winning PDA", async () => {
+    const drawDurationSeconds = 1;
+    const userDepositAtaBalance = 10;
+    const config = await initialize(
+      program,
+      drawDurationSeconds,
+      userDepositAtaBalance
+    );
+
+    // deliberatly choose a non winning combination
+    const numbers = [7, 8, 9, 10, 11, 12];
+
+    const [ticket, ticketBump] = await buy(program, numbers, config, null);
+
+    // wait for cutoff_time to expire
+    await sleep(drawDurationSeconds + 1);
+
+    // calling dispense passing in non winning PDA
+    await dispense(program, config, numbers, program.idl.errors[4].code);
+
+    await assertBalance(
+      program,
+      config.keys.get(USER_DEPOSIT_ATA),
+      userDepositAtaBalance - 1
+    );
+
+    // call it again
+    await dispense(program, config, numbers, program.idl.errors[4].code);
+
+    await assertBalance(
+      program,
+      config.keys.get(USER_DEPOSIT_ATA),
+      userDepositAtaBalance - 1
+    );
+  });
+
+  it("Call dispense twice, first without winning PDA second time with winning PDA", async () => {
+    const drawDurationSeconds = 1;
+    const userDepositAtaBalance = 10;
+    const config = await initialize(
+      program,
+      drawDurationSeconds,
+      userDepositAtaBalance
+    );
+
+    // deliberatly choose a non winning combination
+    const numbers = [7, 8, 9, 10, 11, 12];
+
+    const [ticket, ticketBump] = await buy(program, numbers, config, null);
+
+    // wait for cutoff_time to expire
+    await sleep(drawDurationSeconds + 1);
+
+    await draw(program, config, null);
+
+    // calling dispense passing in non winning PDA
+    await dispense(program, config, numbers, program.idl.errors[4].code);
+
+    await assertBalance(
+      program,
+      config.keys.get(USER_DEPOSIT_ATA),
+      userDepositAtaBalance - 1
+    );
+
+    // get winning numbers from vault_manager in prod
+    const winningNumbers = [1, 2, 3, 4, 5, 6];
+
+    await dispense(program, config, winningNumbers, null);
 
     await assertBalance(
       program,
@@ -837,6 +913,7 @@ async function draw(
 async function dispense(
   program: Program<NoLossLottery>,
   config: Config,
+  numbers: Array<number>,
   error = null
 ) {
   try {
@@ -846,29 +923,25 @@ async function dispense(
     );
 
     // create winning ticket PDA
-    const [winningTicket, winningTicketBump] =
-      await anchor.web3.PublicKey.findProgramAddress(
-        [
-          Uint8Array.from(vaultMgrAccount.winningNumbers),
-          config.keys.get(VAULT_MANAGER).toBuffer(),
-        ],
-        program.programId
-      );
+    const [ticket, ticketBump] = await anchor.web3.PublicKey.findProgramAddress(
+      [Uint8Array.from(numbers), config.keys.get(VAULT_MANAGER).toBuffer()],
+      program.programId
+    );
 
     // dispense prize to winner
     const dispenseTxSig = await program.rpc.dispense(
       config.bumps.get(VAULT),
       config.bumps.get(VAULT_MANAGER),
       config.bumps.get(TICKETS),
-      vaultMgrAccount.winningNumbers,
-      winningTicketBump,
+      numbers,
+      ticketBump,
       {
         accounts: {
           mint: config.keys.get(MINT),
           vault: config.keys.get(VAULT),
           tickets: config.keys.get(TICKETS),
           vaultManager: config.keys.get(VAULT_MANAGER),
-          ticket: winningTicket,
+          ticket: ticket,
           prize: config.keys.get(PRIZE),
           user: program.provider.wallet.publicKey,
           userDepositAta: config.keys.get(USER_DEPOSIT_ATA),
