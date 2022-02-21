@@ -19,3 +19,4 @@ default = []
 anchor-lang = "0.20.1"
 anchor-spl = "0.20.1"
 switchboard-program = "0.2.0"
+marinade-onchain-helper = { git = "https://github.com/jackrieck/marinade-onchain-helper", branch = "mod1" }

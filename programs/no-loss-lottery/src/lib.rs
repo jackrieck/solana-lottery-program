@@ -1,8 +1,19 @@
 use anchor_lang::prelude::*;
-use anchor_lang::AccountsClose;
+use anchor_lang::{AccountsClose, InstructionData};
 use anchor_spl::{
     associated_token,
     token::{self},
+};
+
+use marinade_onchain_helper::{
+    cpi_context_accounts::{
+        MarinadeDeposit, 
+        MarinadeDepositStakeAccount, 
+        MarinadeLiquidUnstake
+    },
+    cpi_util::{
+        invoke_signed,
+    }
 };
 
 declare_id!("Fg6PaFpoGXkYsidMpWTK6W2BeZ7FEfcYkg476zPFsLnS");
@@ -67,29 +78,13 @@ pub mod no_loss_lottery {
         ticket_account.owner = ctx.accounts.user.key();
         ticket_account.numbers = numbers;
 
-        // transfer tokens from user wallet to vault
-        let transfer_accounts = token::Transfer {
-            from: ctx.accounts.user_deposit_ata.clone().to_account_info(),
-            to: ctx.accounts.vault.clone().to_account_info(),
-            authority: ctx.accounts.user.clone().to_account_info(),
-        };
-
-        token::transfer(
-            CpiContext::new(
-                ctx.accounts.token_program.clone().to_account_info(),
-                transfer_accounts,
-            ),
-            ctx.accounts.vault_manager.clone().ticket_price,
-        )?;
-
-        // mint tickets to vault
         let mint_to_accounts = token::MintTo {
             mint: ctx.accounts.tickets.clone().to_account_info(),
             to: ctx.accounts.user_tickets_ata.clone().to_account_info(),
             authority: ctx.accounts.vault_manager.clone().to_account_info(),
         };
 
-        // mint initial ticket supply to the vault tickets ata
+        // mint ticket to user
         token::mint_to(
             CpiContext::new_with_signer(
                 ctx.accounts.token_program.clone().to_account_info(),
@@ -101,7 +96,31 @@ pub mod no_loss_lottery {
                 ]],
             ),
             1,
-        )
+        )?;
+
+        // setup marinade deposit accounts to stake user SOL
+        let marinade_deposit = MarinadeDeposit {
+            state: ctx.accounts.marinade_accounts.state.clone(),
+            msol_mint: ctx.accounts.marinade_accounts.msol_mint.clone(),
+            liq_pool_sol_leg_pda: ctx.accounts.marinade_accounts.liq_pool_sol_leg_pda.clone(),
+            liq_pool_msol_leg: ctx.accounts.marinade_accounts.liq_pool_msol_leg.clone(),
+            liq_pool_msol_leg_authority: ctx
+                .accounts
+                .marinade_accounts
+                .liq_pool_msol_leg_authority
+                .clone(),
+            reserve_pda: ctx.accounts.marinade_accounts.reserve_pda.clone(),
+            transfer_from: ctx.accounts.user_deposit_ata.clone().to_account_info(),
+            mint_to: ctx.accounts.vault.clone().to_account_info(),
+            msol_mint_authority: ctx.accounts.marinade_accounts.msol_mint_authority.clone(),
+            system_program: ctx.accounts.system_program.clone().to_account_info(),
+            token_program: ctx.accounts.token_program.clone().to_account_info(),
+        };
+
+        // stake SOL with marinade
+        let data = Vec::new();
+        data.push(1);
+        invoke_signed(CpiContext::new(ctx.accounts.marinade_program.clone(), marinade_deposit), data.into())
     }
 
     // redeem tickets for deposited tokens
@@ -340,6 +359,10 @@ pub struct Buy<'info> {
 
     #[account(mut, has_one = mint)]
     pub user_deposit_ata: Account<'info, token::TokenAccount>,
+
+    // marinade accounts
+    pub marinade_program: AccountInfo<'info>,
+    pub marinade_accounts: MarinadeDeposit<'info>,
 
     pub system_program: Program<'info, System>,
     pub token_program: Program<'info, token::Token>,

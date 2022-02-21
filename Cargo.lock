@@ -733,6 +733,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "marinade-onchain-helper"
+version = "0.1.0"
+source = "git+https://github.com/jackrieck/marinade-onchain-helper?branch=mod1#f9b3dccc638112f79580f40fced19d66940cd6bb"
+dependencies = [
+ "anchor-lang",
+ "anchor-spl",
+]
+
+[[package]]
 name = "memchr"
 version = "2.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -753,6 +762,7 @@ version = "0.1.0"
 dependencies = [
  "anchor-lang",
  "anchor-spl",
+ "marinade-onchain-helper",
  "switchboard-program",
 ]
 
