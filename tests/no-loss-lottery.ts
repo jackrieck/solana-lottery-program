@@ -534,37 +534,36 @@ async function initialize(
   );
 
   // create mint for testing
-  const mint = await spl.Token.createMint(
+  const mint = await spl.createMint(
     program.provider.connection,
     mintAuthority,
     mintAuthority.publicKey,
     null,
-    9,
-    spl.TOKEN_PROGRAM_ID
+    9
   );
   console.log("test mint created");
 
   // get PDAs
 
   const [vault, vaultBump] = await anchor.web3.PublicKey.findProgramAddress(
-    [mint.publicKey.toBuffer()],
+    [mint.toBuffer()],
     program.programId
   );
 
   const [vaultMgr, vaultMgrBump] =
     await anchor.web3.PublicKey.findProgramAddress(
-      [mint.publicKey.toBuffer(), vault.toBuffer()],
+      [mint.toBuffer(), vault.toBuffer()],
       program.programId
     );
 
   const [tickets, ticketsBump] = await anchor.web3.PublicKey.findProgramAddress(
-    [mint.publicKey.toBuffer(), vault.toBuffer(), vaultMgr.toBuffer()],
+    [mint.toBuffer(), vault.toBuffer(), vaultMgr.toBuffer()],
     program.programId
   );
 
   const [prize, prizeBump] = await anchor.web3.PublicKey.findProgramAddress(
     [
-      mint.publicKey.toBuffer(),
+      mint.toBuffer(),
       vault.toBuffer(),
       vaultMgr.toBuffer(),
       tickets.toBuffer(),
@@ -585,7 +584,7 @@ async function initialize(
     ticketPrice,
     {
       accounts: {
-        mint: mint.publicKey,
+        mint: mint,
         vault: vault,
         vaultManager: vaultMgr,
         tickets: tickets,
@@ -600,43 +599,52 @@ async function initialize(
   console.log("initTxSig:", initTxSig);
 
   // get user ata
-  const userDepositAta = await mint.getOrCreateAssociatedAccountInfo(
+  const userDepositAta = await spl.getOrCreateAssociatedTokenAccount(
+    program.provider.connection,
+    mintAuthority,
+    mint,
     program.provider.wallet.publicKey
   );
 
   // mint tokens to user_ata
-  await mint.mintTo(
+  await spl.mintTo(
+    program.provider.connection,
+    mintAuthority,
+    mint,
     userDepositAta.address,
     mintAuthority.publicKey,
-    [],
     userDepositAtaBalance
   );
   console.log("minted %d tokens to user_ata", userDepositAtaBalance);
 
   // get user tickets ata
-  const userTicketsAta = await spl.Token.getAssociatedTokenAddress(
-    spl.ASSOCIATED_TOKEN_PROGRAM_ID,
-    spl.TOKEN_PROGRAM_ID,
+  const userTicketsAta = await spl.getOrCreateAssociatedTokenAccount(
+    program.provider.connection,
+    mintAuthority,
     tickets,
     program.provider.wallet.publicKey
   );
 
   // mint tokens to prize for testing
-  await mint.mintTo(prize, mintAuthority.publicKey, [], PRIZE_AMOUNT);
-  console.log(
-    "minted %d tokens to prize ata, dont actually do this in prod",
+  await spl.mintTo(
+    program.provider.connection,
+    mintAuthority,
+    mint,
+    prize,
+    mintAuthority.publicKey,
     PRIZE_AMOUNT
   );
+  console.log("minted %d tokens to prize ata", PRIZE_AMOUNT);
 
   let keys = new Map<String, anchor.web3.PublicKey>();
   keys.set(VAULT, vault);
   keys.set(VAULT_MANAGER, vaultMgr);
-  keys.set(MINT, mint.publicKey);
+  keys.set(MINT, mint);
   keys.set(MINT_AUTHORITY, mintAuthority.publicKey);
   keys.set(TICKETS, tickets);
   keys.set(PRIZE, prize);
   keys.set(USER_DEPOSIT_ATA, userDepositAta.address);
-  keys.set(USER_TICKET_ATA, userTicketsAta);
+  keys.set(USER_TICKET_ATA, userTicketsAta.address);
 
   let bumps = new Map<String, number>();
   bumps.set(VAULT, vaultBump);
