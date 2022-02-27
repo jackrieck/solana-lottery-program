@@ -1063,5 +1063,5 @@ async function buyNTickets(
   }
   await Promise.all(buyPromises);
 
-  console.log("%d tickets purchased", count)
+  console.log("%d tickets purchased", count);
 }
