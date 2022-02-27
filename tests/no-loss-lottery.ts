@@ -1,6 +1,7 @@
 import * as anchor from "@project-serum/anchor";
 import * as spl from "@solana/spl-token";
 import * as assert from "assert";
+import * as tokenSwap from "@solana/spl-token-swap";
 import { Program } from "@project-serum/anchor";
 import { NoLossLottery } from "../target/types/no_loss_lottery";
 
@@ -19,6 +20,7 @@ const PRIZE_AMOUNT = 100;
 
 interface Config {
   keys: Map<String, anchor.web3.PublicKey>;
+  mintAuthority: anchor.web3.Account;
 }
 
 describe("Buy", () => {
@@ -499,6 +501,27 @@ describe("Dispense", () => {
   });
 });
 
+describe("SwapTokens", () => {
+  anchor.setProvider(anchor.Provider.env());
+  const program = anchor.workspace.NoLossLottery as Program<NoLossLottery>;
+
+  it("SwapTokens", async () => {
+    const drawDurationSeconds = 1;
+
+    const config = await initialize(program, drawDurationSeconds);
+
+    // buy a bunch of tickets
+    let buyPromises = [];
+    for (let i = 0; i < 10; i++) {
+      buyPromises.push(buy(program, [1 + i, 2, 3, 4, 5, 6], config, null));
+    }
+    Promise.all(buyPromises);
+
+    // swap tokens to yield bearing tokens and put in yield vault
+    await swapTokens(program, config, 5, 2, null);
+  });
+});
+
 // create new Account and seed with lamports
 async function newAccountWithLamports(
   connection: anchor.web3.Connection,
@@ -679,6 +702,7 @@ async function initialize(
 
   const config: Config = {
     keys: keys,
+    mintAuthority: mintAuthority,
   };
 
   return config;
@@ -831,6 +855,158 @@ async function dispense(
       },
     });
     console.log("dispenseTxSig:", dispenseTxSig);
+  } catch (e) {
+    if (error) {
+      assert.equal(e.code, error);
+    } else {
+      throw e;
+    }
+  }
+}
+
+async function swapTokens(
+  program: Program<NoLossLottery>,
+  config: Config,
+  amountIn: number,
+  minAmountOut: number,
+  error = null
+) {
+  // Pool fees
+  const TRADING_FEE_NUMERATOR = 25;
+  const TRADING_FEE_DENOMINATOR = 10000;
+  const OWNER_TRADING_FEE_NUMERATOR = 5;
+  const OWNER_TRADING_FEE_DENOMINATOR = 10000;
+  const OWNER_WITHDRAW_FEE_NUMERATOR = 0;
+  const OWNER_WITHDRAW_FEE_DENOMINATOR = 0;
+  const HOST_FEE_NUMERATOR = 20;
+  const HOST_FEE_DENOMINATOR = 100;
+
+  try {
+    const tokenSwapAccount = new anchor.web3.Account();
+
+    const [tokenSwapAccountAuthority, tokenSwapAccountAuthorityBump] =
+      await anchor.web3.PublicKey.findProgramAddress(
+        [tokenSwapAccount.publicKey.toBuffer()],
+        tokenSwap.TOKEN_SWAP_PROGRAM_ID
+      );
+
+    // create pool mint
+
+    const tokenPoolMint = await spl.createMint(
+      program.provider.connection,
+      config.mintAuthority,
+      tokenSwapAccountAuthority,
+      null,
+      2
+    );
+    console.log("created pool mint");
+
+    const feeAccount = await spl.getOrCreateAssociatedTokenAccount(
+      program.provider.connection,
+      config.mintAuthority,
+      tokenPoolMint,
+      new anchor.web3.PublicKey("HfoTxFR1Tm6kGmWgYWD6J7YHVy1UwqSULUGVLXkJqaKN"),
+      true
+    );
+    console.log("fee account created");
+
+    // create swap token accounts
+    const swapPoolMintTokenAccount =
+      await spl.getOrCreateAssociatedTokenAccount(
+        program.provider.connection,
+        config.mintAuthority,
+        tokenPoolMint,
+        config.mintAuthority.publicKey,
+        false
+      );
+    const swapDepositVault = await spl.getOrCreateAssociatedTokenAccount(
+      program.provider.connection,
+      config.mintAuthority,
+      config.keys.get(DEPOSIT_MINT),
+      tokenSwapAccountAuthority,
+      true
+    );
+    const swapYieldVault = await spl.getOrCreateAssociatedTokenAccount(
+      program.provider.connection,
+      config.mintAuthority,
+      config.keys.get(YIELD_MINT),
+      tokenSwapAccountAuthority,
+      true
+    );
+    console.log("created swap pool mint token accounts");
+
+    // mint initial tokens to swap token accounts
+    await spl.mintTo(
+      program.provider.connection,
+      config.mintAuthority,
+      config.keys.get(DEPOSIT_MINT),
+      swapDepositVault.address,
+      config.mintAuthority,
+      1000
+    );
+    await spl.mintTo(
+      program.provider.connection,
+      config.mintAuthority,
+      config.keys.get(YIELD_MINT),
+      swapYieldVault.address,
+      config.mintAuthority,
+      1000
+    );
+    console.log("minted initial tokens to swap token accounts");
+
+    await tokenSwap.TokenSwap.createTokenSwap(
+      program.provider.connection,
+      config.mintAuthority,
+      tokenSwapAccount,
+      tokenSwapAccountAuthority,
+      swapDepositVault.address,
+      swapYieldVault.address,
+      tokenPoolMint,
+      config.keys.get(DEPOSIT_MINT),
+      config.keys.get(YIELD_MINT),
+      feeAccount.address,
+      swapPoolMintTokenAccount.address,
+      tokenSwap.TOKEN_SWAP_PROGRAM_ID,
+      spl.TOKEN_PROGRAM_ID,
+      tokenSwapAccountAuthorityBump,
+      TRADING_FEE_NUMERATOR,
+      TRADING_FEE_DENOMINATOR,
+      OWNER_TRADING_FEE_NUMERATOR,
+      OWNER_TRADING_FEE_DENOMINATOR,
+      OWNER_WITHDRAW_FEE_NUMERATOR,
+      OWNER_WITHDRAW_FEE_DENOMINATOR,
+      HOST_FEE_NUMERATOR,
+      HOST_FEE_DENOMINATOR,
+      tokenSwap.CurveType.ConstantProduct
+    );
+    console.log("tokenSwap pool created");
+
+    const swapTokensTxSig = await program.rpc.swapTokens(
+      new anchor.BN(amountIn),
+      new anchor.BN(minAmountOut),
+      {
+        accounts: {
+          vaultManager: config.keys.get(VAULT_MANAGER),
+          depositMint: config.keys.get(DEPOSIT_MINT),
+          depositVault: config.keys.get(DEPOSIT_VAULT),
+          yieldMint: config.keys.get(YIELD_MINT),
+          yieldVault: config.keys.get(YIELD_VAULT),
+          swapYieldVault: swapYieldVault.address,
+          swapDepositVault: swapDepositVault.address,
+          poolMint: tokenPoolMint,
+          amm: tokenSwapAccount.publicKey,
+          ammAuthority: tokenSwapAccountAuthority,
+          poolFee: feeAccount.address,
+          user: program.provider.wallet.publicKey,
+          tokenSwapProgram: tokenSwap.TOKEN_SWAP_PROGRAM_ID,
+          tokenProgram: spl.TOKEN_PROGRAM_ID,
+          associatedTokenProgram: spl.ASSOCIATED_TOKEN_PROGRAM_ID,
+          systemProgram: anchor.web3.SystemProgram.programId,
+          rent: anchor.web3.SYSVAR_RENT_PUBKEY,
+        },
+      }
+    );
+    console.log("swapTokensTxSig:", swapTokensTxSig);
   } catch (e) {
     if (error) {
       assert.equal(e.code, error);

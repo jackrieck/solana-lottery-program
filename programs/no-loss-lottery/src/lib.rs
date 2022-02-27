@@ -4,6 +4,7 @@ use anchor_spl::{
     associated_token,
     token::{self},
 };
+use spl_token_swap::instruction::{swap, Swap};
 
 declare_id!("Fg6PaFpoGXkYsidMpWTK6W2BeZ7FEfcYkg476zPFsLnS");
 
@@ -229,6 +230,80 @@ pub mod no_loss_lottery {
             ),
             ctx.accounts.prize.amount,
         )
+    }
+
+    // swap tokens via crank
+    pub fn swap_tokens(
+        ctx: Context<SwapTokens>,
+        amount_in: u64,
+        minimum_amount_out: u64,
+    ) -> Result<()> {
+        // tell the vault manager to approve the user calling this function to swap
+        let approve_accounts = token::Approve {
+            to: ctx.accounts.deposit_vault.clone().to_account_info(),
+            delegate: ctx.accounts.user.clone().to_account_info(),
+            authority: ctx.accounts.vault_manager.clone().to_account_info(),
+        };
+
+        token::approve(
+            CpiContext::new_with_signer(
+                ctx.accounts.token_program.clone().to_account_info(),
+                approve_accounts,
+                &[&[
+                    ctx.accounts.deposit_mint.clone().key().as_ref(),
+                    ctx.accounts.yield_mint.clone().key().as_ref(),
+                    ctx.accounts.deposit_vault.clone().key().as_ref(),
+                    ctx.accounts.yield_vault.clone().key().as_ref(),
+                    &[*ctx.bumps.get("vault_manager").unwrap()],
+                ]],
+            ),
+            amount_in,
+        )?;
+
+        // accounts array
+        let accounts = [
+            ctx.accounts.token_swap_program.clone(),
+            ctx.accounts.token_program.clone().to_account_info(),
+            ctx.accounts.amm.clone(),
+            ctx.accounts.amm_authority.clone(),
+            ctx.accounts.user.clone().to_account_info(),
+            ctx.accounts.deposit_vault.clone().to_account_info(),
+            ctx.accounts.swap_deposit_vault.clone().to_account_info(),
+            ctx.accounts.swap_yield_vault.clone().to_account_info(),
+            ctx.accounts.yield_vault.clone().to_account_info(),
+            ctx.accounts.pool_mint.clone().to_account_info(),
+            ctx.accounts.pool_fee.clone().to_account_info(),
+        ];
+
+        // set data for swap instruction
+        let data = Swap {
+            amount_in: amount_in,
+            minimum_amount_out: minimum_amount_out,
+        };
+
+        // create swap instruction
+        let ix = swap(
+            &ctx.accounts.token_swap_program.clone().key(),
+            &ctx.accounts.token_program.clone().key(),
+            &ctx.accounts.amm.clone().key(),
+            &ctx.accounts.amm_authority.clone().key(),
+            &ctx.accounts.user.clone().key(),
+            &ctx.accounts.deposit_vault.clone().key(),
+            &ctx.accounts.swap_deposit_vault.clone().key(),
+            &ctx.accounts.swap_yield_vault.clone().key(),
+            &ctx.accounts.yield_vault.clone().key(),
+            &ctx.accounts.pool_mint.clone().key(),
+            &ctx.accounts.pool_fee.clone().key(),
+            None,
+            data,
+        )?;
+
+        // swap tokens
+        // TODO: how to do without match
+        match anchor_lang::solana_program::program::invoke(&ix, &accounts) {
+            Ok(_) => Ok(()),
+            Err(e) => Err(e.into()),
+        }
     }
 }
 
@@ -465,6 +540,62 @@ pub struct Dispense<'info> {
 
     pub system_program: Program<'info, System>,
     pub token_program: Program<'info, token::Token>,
+}
+
+#[derive(Accounts)]
+pub struct SwapTokens<'info> {
+    // swap mints
+    #[account()]
+    pub yield_mint: Account<'info, token::Mint>,
+    #[account()]
+    pub deposit_mint: Account<'info, token::Mint>,
+
+    #[account(mut, seeds = [deposit_mint.key().as_ref()], bump)]
+    pub deposit_vault: Box<Account<'info, token::TokenAccount>>,
+
+    #[account(mut, seeds = [yield_mint.key().as_ref()], bump)]
+    pub yield_vault: Box<Account<'info, token::TokenAccount>>,
+
+    #[account(mut,
+        has_one = deposit_vault,
+        has_one = deposit_mint,
+        has_one = yield_vault,
+        has_one = yield_mint,
+        seeds = [deposit_mint.key().as_ref(), yield_mint.key().as_ref(), deposit_vault.key().as_ref(), yield_vault.key().as_ref()],
+        bump)]
+    pub vault_manager: Box<Account<'info, VaultManager>>,
+
+    // swap program token accounts
+    #[account(mut)]
+    pub swap_yield_vault: Box<Account<'info, token::TokenAccount>>,
+    #[account(mut)]
+    pub swap_deposit_vault: Box<Account<'info, token::TokenAccount>>,
+
+    // LP mint
+    #[account(mut)]
+    pub pool_mint: Account<'info, token::Mint>,
+
+    /// CHECK: TODO
+    #[account()]
+    pub amm: AccountInfo<'info>,
+
+    /// CHECK: TODO
+    #[account(mut)]
+    pub amm_authority: AccountInfo<'info>,
+
+    // fees go here
+    #[account(mut)]
+    pub pool_fee: Account<'info, token::TokenAccount>,
+
+    #[account(mut)]
+    pub user: Signer<'info>,
+
+    /// CHECK: TODO
+    pub token_swap_program: AccountInfo<'info>,
+    pub token_program: Program<'info, token::Token>,
+    pub associated_token_program: Program<'info, associated_token::AssociatedToken>,
+    pub system_program: Program<'info, System>,
+    pub rent: Sysvar<'info, Rent>,
 }
 
 #[account]
