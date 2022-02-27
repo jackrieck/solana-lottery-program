@@ -4,9 +4,11 @@ import * as assert from "assert";
 import { Program } from "@project-serum/anchor";
 import { NoLossLottery } from "../target/types/no_loss_lottery";
 
-const VAULT = "VAULT";
+const DEPOSIT_VAULT = "DEPOSIT_VAULT";
+const DEPOSIT_MINT = "DEPOSIT_MINT";
+const YIELD_VAULT = "YIELD_VAULT";
+const YIELD_MINT = "YIELD_MINT";
 const VAULT_MANAGER = "VAULT_MANAGER";
-const MINT = "MINT";
 const MINT_AUTHORITY = "MINT_AUTHORITY";
 const TICKETS = "TICKETS";
 const PRIZE = "PRIZE";
@@ -532,38 +534,68 @@ async function initialize(
     program.provider.connection
   );
 
-  // create mint for testing
-  const mint = await spl.createMint(
+  // create deposit mint for testing
+  const depositMint = await spl.createMint(
     program.provider.connection,
     mintAuthority,
     mintAuthority.publicKey,
     null,
     9
   );
-  console.log("test mint created");
+  console.log("deposit test mint created");
+
+  // create yield mint for testing
+  const yieldMint = await spl.createMint(
+    program.provider.connection,
+    mintAuthority,
+    mintAuthority.publicKey,
+    null,
+    9
+  );
+  console.log("yield test mint created");
 
   // get PDAs
 
-  const [vault, vaultBump] = await anchor.web3.PublicKey.findProgramAddress(
-    [mint.toBuffer()],
-    program.programId
-  );
+  const [depositVault, depositVaultBump] =
+    await anchor.web3.PublicKey.findProgramAddress(
+      [depositMint.toBuffer()],
+      program.programId
+    );
+
+  const [yieldVault, yieldVaultBump] =
+    await anchor.web3.PublicKey.findProgramAddress(
+      [yieldMint.toBuffer()],
+      program.programId
+    );
 
   const [vaultMgr, vaultMgrBump] =
     await anchor.web3.PublicKey.findProgramAddress(
-      [mint.toBuffer(), vault.toBuffer()],
+      [
+        depositMint.toBuffer(),
+        yieldMint.toBuffer(),
+        depositVault.toBuffer(),
+        yieldVault.toBuffer(),
+      ],
       program.programId
     );
 
   const [tickets, ticketsBump] = await anchor.web3.PublicKey.findProgramAddress(
-    [mint.toBuffer(), vault.toBuffer(), vaultMgr.toBuffer()],
+    [
+      depositMint.toBuffer(),
+      yieldMint.toBuffer(),
+      depositVault.toBuffer(),
+      yieldVault.toBuffer(),
+      vaultMgr.toBuffer(),
+    ],
     program.programId
   );
 
   const [prize, prizeBump] = await anchor.web3.PublicKey.findProgramAddress(
     [
-      mint.toBuffer(),
-      vault.toBuffer(),
+      depositMint.toBuffer(),
+      yieldMint.toBuffer(),
+      depositVault.toBuffer(),
+      yieldVault.toBuffer(),
       vaultMgr.toBuffer(),
       tickets.toBuffer(),
     ],
@@ -579,8 +611,10 @@ async function initialize(
     ticketPrice,
     {
       accounts: {
-        mint: mint,
-        vault: vault,
+        depositMint: depositMint,
+        yieldMint: yieldMint,
+        depositVault: depositVault,
+        yieldVault: yieldVault,
         vaultManager: vaultMgr,
         tickets: tickets,
         prize: prize,
@@ -597,7 +631,7 @@ async function initialize(
   const userDepositAta = await spl.getOrCreateAssociatedTokenAccount(
     program.provider.connection,
     mintAuthority,
-    mint,
+    depositMint,
     program.provider.wallet.publicKey
   );
 
@@ -605,7 +639,7 @@ async function initialize(
   await spl.mintTo(
     program.provider.connection,
     mintAuthority,
-    mint,
+    depositMint,
     userDepositAta.address,
     mintAuthority.publicKey,
     userDepositAtaBalance
@@ -624,7 +658,7 @@ async function initialize(
   await spl.mintTo(
     program.provider.connection,
     mintAuthority,
-    mint,
+    depositMint,
     prize,
     mintAuthority.publicKey,
     PRIZE_AMOUNT
@@ -632,19 +666,16 @@ async function initialize(
   console.log("minted %d tokens to prize ata", PRIZE_AMOUNT);
 
   let keys = new Map<String, anchor.web3.PublicKey>();
-  keys.set(VAULT, vault);
+  keys.set(DEPOSIT_VAULT, depositVault);
+  keys.set(DEPOSIT_MINT, depositMint);
+  keys.set(YIELD_VAULT, yieldVault);
+  keys.set(YIELD_MINT, yieldMint);
   keys.set(VAULT_MANAGER, vaultMgr);
-  keys.set(MINT, mint);
   keys.set(MINT_AUTHORITY, mintAuthority.publicKey);
   keys.set(TICKETS, tickets);
   keys.set(PRIZE, prize);
   keys.set(USER_DEPOSIT_ATA, userDepositAta.address);
   keys.set(USER_TICKET_ATA, userTicketsAta.address);
-
-  let bumps = new Map<String, number>();
-  bumps.set(VAULT, vaultBump);
-  bumps.set(VAULT_MANAGER, vaultMgrBump);
-  bumps.set(TICKETS, ticketsBump);
 
   const config: Config = {
     keys: keys,
@@ -669,8 +700,10 @@ async function buy(
   try {
     const buyTxSig = await program.rpc.buy(numbers, {
       accounts: {
-        mint: config.keys.get(MINT),
-        vault: config.keys.get(VAULT),
+        depositMint: config.keys.get(DEPOSIT_MINT),
+        depositVault: config.keys.get(DEPOSIT_VAULT),
+        yieldMint: config.keys.get(YIELD_MINT),
+        yieldVault: config.keys.get(YIELD_VAULT),
         vaultManager: config.keys.get(VAULT_MANAGER),
         tickets: config.keys.get(TICKETS),
         ticket: ticket,
@@ -705,8 +738,10 @@ async function redeem(
     // user redeem token
     const redeemTxSig = await program.rpc.redeem({
       accounts: {
-        mint: config.keys.get(MINT),
-        vault: config.keys.get(VAULT),
+        depositMint: config.keys.get(DEPOSIT_MINT),
+        depositVault: config.keys.get(DEPOSIT_VAULT),
+        yieldMint: config.keys.get(YIELD_MINT),
+        yieldVault: config.keys.get(YIELD_VAULT),
         tickets: config.keys.get(TICKETS),
         vaultManager: config.keys.get(VAULT_MANAGER),
         ticket: ticket,
@@ -738,8 +773,10 @@ async function draw(
     // draw winner
     const drawTxSig = await program.rpc.draw({
       accounts: {
-        mint: config.keys.get(MINT),
-        vault: config.keys.get(VAULT),
+        depositMint: config.keys.get(DEPOSIT_MINT),
+        depositVault: config.keys.get(DEPOSIT_VAULT),
+        yieldMint: config.keys.get(YIELD_MINT),
+        yieldVault: config.keys.get(YIELD_VAULT),
         tickets: config.keys.get(TICKETS),
         vaultManager: config.keys.get(VAULT_MANAGER),
         user: program.provider.wallet.publicKey,
@@ -779,8 +816,10 @@ async function dispense(
     // dispense prize to winner
     const dispenseTxSig = await program.rpc.dispense(numbers, {
       accounts: {
-        mint: config.keys.get(MINT),
-        vault: config.keys.get(VAULT),
+        depositMint: config.keys.get(DEPOSIT_MINT),
+        depositVault: config.keys.get(DEPOSIT_VAULT),
+        yieldMint: config.keys.get(YIELD_MINT),
+        yieldVault: config.keys.get(YIELD_VAULT),
         tickets: config.keys.get(TICKETS),
         vaultManager: config.keys.get(VAULT_MANAGER),
         ticket: ticket,

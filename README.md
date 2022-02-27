@@ -28,3 +28,5 @@ No-loss lottery: Build a platform for users to deposit a variety of tokens into 
 - swap
 - soteria
 - github actions automated deploy pipeline
+- rename Vault Manager to manager
+- try to reduce PDA seed sprawl

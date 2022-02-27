@@ -20,8 +20,10 @@ pub mod no_loss_lottery {
         vault_mgr.draw_duration = draw_duration;
         vault_mgr.cutoff_time = 0;
         vault_mgr.ticket_price = ticket_price;
-        vault_mgr.mint = ctx.accounts.mint.clone().key();
-        vault_mgr.vault = ctx.accounts.vault.clone().key();
+        vault_mgr.deposit_mint = ctx.accounts.deposit_mint.clone().key();
+        vault_mgr.deposit_vault = ctx.accounts.deposit_vault.clone().key();
+        vault_mgr.yield_mint = ctx.accounts.yield_mint.clone().key();
+        vault_mgr.yield_vault = ctx.accounts.yield_vault.clone().key();
         vault_mgr.tickets = ctx.accounts.tickets.clone().key();
 
         Ok(())
@@ -50,8 +52,8 @@ pub mod no_loss_lottery {
 
         // create ticket PDA data
         let ticket_account = &mut ctx.accounts.ticket;
-        ticket_account.mint = ctx.accounts.mint.clone().key();
-        ticket_account.vault = ctx.accounts.vault.clone().key();
+        ticket_account.mint = ctx.accounts.deposit_mint.clone().key();
+        ticket_account.vault = ctx.accounts.deposit_vault.clone().key();
         ticket_account.tickets = ctx.accounts.tickets.clone().key();
         ticket_account.owner = ctx.accounts.user.key();
         ticket_account.numbers = numbers;
@@ -59,7 +61,7 @@ pub mod no_loss_lottery {
         // transfer tokens from user wallet to vault
         let transfer_accounts = token::Transfer {
             from: ctx.accounts.user_deposit_ata.clone().to_account_info(),
-            to: ctx.accounts.vault.clone().to_account_info(),
+            to: ctx.accounts.deposit_vault.clone().to_account_info(),
             authority: ctx.accounts.user.clone().to_account_info(),
         };
 
@@ -84,8 +86,10 @@ pub mod no_loss_lottery {
                 ctx.accounts.token_program.clone().to_account_info(),
                 mint_to_accounts,
                 &[&[
-                    ctx.accounts.mint.clone().key().as_ref(),
-                    ctx.accounts.vault.clone().key().as_ref(),
+                    ctx.accounts.deposit_mint.clone().key().as_ref(),
+                    ctx.accounts.yield_mint.clone().key().as_ref(),
+                    ctx.accounts.deposit_vault.clone().key().as_ref(),
+                    ctx.accounts.yield_vault.clone().key().as_ref(),
                     &[*ctx.bumps.get("vault_manager").unwrap()],
                 ]],
             ),
@@ -118,7 +122,7 @@ pub mod no_loss_lottery {
             .close(ctx.accounts.user.clone().to_account_info())?;
 
         let transfer_accounts = token::Transfer {
-            from: ctx.accounts.vault.clone().to_account_info(),
+            from: ctx.accounts.deposit_vault.clone().to_account_info(),
             to: ctx.accounts.user_deposit_ata.clone().to_account_info(),
             authority: ctx.accounts.vault_manager.clone().to_account_info(),
         };
@@ -129,8 +133,10 @@ pub mod no_loss_lottery {
                 ctx.accounts.token_program.clone().to_account_info(),
                 transfer_accounts,
                 &[&[
-                    ctx.accounts.mint.key().as_ref(),
-                    ctx.accounts.vault.key().as_ref(),
+                    ctx.accounts.deposit_mint.clone().key().as_ref(),
+                    ctx.accounts.yield_mint.clone().key().as_ref(),
+                    ctx.accounts.deposit_vault.clone().key().as_ref(),
+                    ctx.accounts.yield_vault.clone().key().as_ref(),
                     &[*ctx.bumps.get("vault_manager").unwrap()],
                 ]],
             ),
@@ -214,8 +220,10 @@ pub mod no_loss_lottery {
                 ctx.accounts.token_program.clone().to_account_info(),
                 transfer_accounts,
                 &[&[
-                    ctx.accounts.mint.key().as_ref(),
-                    ctx.accounts.vault.key().as_ref(),
+                    ctx.accounts.deposit_mint.clone().key().as_ref(),
+                    ctx.accounts.yield_mint.clone().key().as_ref(),
+                    ctx.accounts.deposit_vault.clone().key().as_ref(),
+                    ctx.accounts.yield_vault.clone().key().as_ref(),
                     &[*ctx.bumps.get("vault_manager").unwrap()],
                 ]],
             ),
@@ -227,25 +235,34 @@ pub mod no_loss_lottery {
 #[derive(Accounts)]
 pub struct Initialize<'info> {
     #[account(mut)]
-    pub mint: Account<'info, token::Mint>,
+    pub deposit_mint: Box<Account<'info, token::Mint>>,
+
+    #[account(mut)]
+    pub yield_mint: Box<Account<'info, token::Mint>>,
 
     #[account(init,
         payer = user,
-        token::mint = mint,
+        token::mint = deposit_mint,
         token::authority = vault_manager,
-        seeds = [mint.key().as_ref()],
-        bump, has_one = mint)]
-    pub vault: Account<'info, token::TokenAccount>,
+        seeds = [deposit_mint.key().as_ref()], bump)]
+    pub deposit_vault: Box<Account<'info, token::TokenAccount>>,
 
     #[account(init,
         payer = user,
-        seeds = [mint.key().as_ref(), vault.key().as_ref()],
+        token::mint = yield_mint,
+        token::authority = vault_manager,
+        seeds = [yield_mint.key().as_ref()], bump)]
+    pub yield_vault: Box<Account<'info, token::TokenAccount>>,
+
+    #[account(init,
+        payer = user,
+        seeds = [deposit_mint.key().as_ref(), yield_mint.key().as_ref(), deposit_vault.key().as_ref(), yield_vault.key().as_ref()],
         bump)]
     pub vault_manager: Account<'info, VaultManager>,
 
     #[account(init,
         payer = user,
-        seeds = [mint.key().as_ref(), vault.key().as_ref(), vault_manager.key().as_ref()],
+        seeds = [deposit_mint.key().as_ref(), yield_mint.key().as_ref(), deposit_vault.key().as_ref(), yield_vault.key().as_ref(), vault_manager.key().as_ref()],
         bump,
         mint::authority = vault_manager,
         mint::decimals = 0,
@@ -254,9 +271,9 @@ pub struct Initialize<'info> {
 
     #[account(init,
         payer = user,
-        seeds = [mint.key().as_ref(), vault.key().as_ref(), vault_manager.key().as_ref(), tickets.key().as_ref()],
+        seeds = [deposit_mint.key().as_ref(), yield_mint.key().as_ref(), deposit_vault.key().as_ref(), yield_vault.key().as_ref(), vault_manager.key().as_ref(), tickets.key().as_ref()],
         bump,
-        token::mint = mint,
+        token::mint = deposit_mint,
         token::authority = vault_manager
     )]
     pub prize: Box<Account<'info, token::TokenAccount>>,
@@ -273,18 +290,24 @@ pub struct Initialize<'info> {
 #[instruction(numbers: [u8; 6])]
 pub struct Buy<'info> {
     #[account(mut)]
-    pub mint: Account<'info, token::Mint>,
+    pub deposit_mint: Box<Account<'info, token::Mint>>,
+
+    #[account(mut)]
+    pub yield_mint: Box<Account<'info, token::Mint>>,
+
+    #[account(mut, seeds = [deposit_mint.key().as_ref()], bump)]
+    pub deposit_vault: Box<Account<'info, token::TokenAccount>>,
+
+    #[account(mut, seeds = [yield_mint.key().as_ref()], bump)]
+    pub yield_vault: Box<Account<'info, token::TokenAccount>>,
 
     #[account(mut,
-        seeds = [mint.key().as_ref()],
-        bump, has_one = mint)]
-    pub vault: Account<'info, token::TokenAccount>,
-
-    #[account(mut,
-        has_one = vault,
-        has_one = mint,
+        has_one = deposit_vault,
+        has_one = deposit_mint,
+        has_one = yield_vault,
+        has_one = yield_mint,
         has_one = tickets,
-        seeds = [mint.key().as_ref(), vault.key().as_ref()],
+        seeds = [deposit_mint.key().as_ref(), yield_mint.key().as_ref(), deposit_vault.key().as_ref(), yield_vault.key().as_ref()],
         bump)]
     pub vault_manager: Box<Account<'info, VaultManager>>,
 
@@ -307,7 +330,7 @@ pub struct Buy<'info> {
     #[account(mut)]
     pub user: Signer<'info>,
 
-    #[account(mut, has_one = mint)]
+    #[account(mut)]
     pub user_deposit_ata: Account<'info, token::TokenAccount>,
 
     pub system_program: Program<'info, System>,
@@ -319,20 +342,26 @@ pub struct Buy<'info> {
 #[derive(Accounts)]
 pub struct Redeem<'info> {
     #[account(mut)]
-    pub mint: Account<'info, token::Mint>,
+    pub deposit_mint: Box<Account<'info, token::Mint>>,
+
+    #[account(mut)]
+    pub yield_mint: Box<Account<'info, token::Mint>>,
+
+    #[account(mut, seeds = [deposit_mint.key().as_ref()], bump)]
+    pub deposit_vault: Box<Account<'info, token::TokenAccount>>,
+
+    #[account(mut, seeds = [yield_mint.key().as_ref()], bump)]
+    pub yield_vault: Box<Account<'info, token::TokenAccount>>,
 
     #[account(mut,
-        seeds = [mint.key().as_ref()],
-        bump, has_one = mint)]
-    pub vault: Account<'info, token::TokenAccount>,
-
-    #[account(mut,
-        has_one = vault,
-        has_one = mint,
+        has_one = deposit_vault,
+        has_one = deposit_mint,
+        has_one = yield_vault,
+        has_one = yield_mint,
         has_one = tickets,
-        seeds = [mint.key().as_ref(), vault.key().as_ref()],
+        seeds = [deposit_mint.key().as_ref(), yield_mint.key().as_ref(), deposit_vault.key().as_ref(), yield_vault.key().as_ref()],
         bump)]
-    pub vault_manager: Account<'info, VaultManager>,
+    pub vault_manager: Box<Account<'info, VaultManager>>,
 
     #[account(mut)]
     pub tickets: Account<'info, token::Mint>,
@@ -340,7 +369,7 @@ pub struct Redeem<'info> {
     #[account(mut)]
     pub ticket: Box<Account<'info, Ticket>>,
 
-    #[account(mut, has_one = mint)]
+    #[account(mut)]
     pub prize: Box<Account<'info, token::TokenAccount>>,
 
     #[account(mut,
@@ -351,7 +380,7 @@ pub struct Redeem<'info> {
     #[account(mut)]
     pub user: Signer<'info>,
 
-    #[account(mut, has_one = mint)]
+    #[account(mut)]
     pub user_deposit_ata: Account<'info, token::TokenAccount>,
 
     pub system_program: Program<'info, System>,
@@ -362,20 +391,26 @@ pub struct Redeem<'info> {
 #[derive(Accounts)]
 pub struct Draw<'info> {
     #[account(mut)]
-    pub mint: Account<'info, token::Mint>,
+    pub deposit_mint: Box<Account<'info, token::Mint>>,
+
+    #[account(mut)]
+    pub yield_mint: Box<Account<'info, token::Mint>>,
+
+    #[account(mut, seeds = [deposit_mint.key().as_ref()], bump)]
+    pub deposit_vault: Box<Account<'info, token::TokenAccount>>,
+
+    #[account(mut, seeds = [yield_mint.key().as_ref()], bump)]
+    pub yield_vault: Box<Account<'info, token::TokenAccount>>,
 
     #[account(mut,
-        seeds = [mint.key().as_ref()],
-        bump, has_one = mint)]
-    pub vault: Account<'info, token::TokenAccount>,
-
-    #[account(mut,
-        has_one = vault,
-        has_one = mint,
+        has_one = deposit_vault,
+        has_one = deposit_mint,
+        has_one = yield_vault,
+        has_one = yield_mint,
         has_one = tickets,
-        seeds = [mint.key().as_ref(), vault.key().as_ref()],
+        seeds = [deposit_mint.key().as_ref(), yield_mint.key().as_ref(), deposit_vault.key().as_ref(), yield_vault.key().as_ref()],
         bump)]
-    pub vault_manager: Account<'info, VaultManager>,
+    pub vault_manager: Box<Account<'info, VaultManager>>,
 
     #[account(mut)]
     pub tickets: Account<'info, token::Mint>,
@@ -392,20 +427,26 @@ pub struct Draw<'info> {
 #[instruction(numbers: [u8; 6])]
 pub struct Dispense<'info> {
     #[account(mut)]
-    pub mint: Account<'info, token::Mint>,
+    pub deposit_mint: Box<Account<'info, token::Mint>>,
+
+    #[account(mut)]
+    pub yield_mint: Box<Account<'info, token::Mint>>,
+
+    #[account(mut, seeds = [deposit_mint.key().as_ref()], bump)]
+    pub deposit_vault: Box<Account<'info, token::TokenAccount>>,
+
+    #[account(mut, seeds = [yield_mint.key().as_ref()], bump)]
+    pub yield_vault: Box<Account<'info, token::TokenAccount>>,
 
     #[account(mut,
-        seeds = [mint.key().as_ref()],
-        bump, has_one = mint)]
-    pub vault: Account<'info, token::TokenAccount>,
-
-    #[account(mut,
-        has_one = vault,
-        has_one = mint,
+        has_one = deposit_vault,
+        has_one = deposit_mint,
+        has_one = yield_vault,
+        has_one = yield_mint,
         has_one = tickets,
-        seeds = [mint.key().as_ref(), vault.key().as_ref()],
+        seeds = [deposit_mint.key().as_ref(), yield_mint.key().as_ref(), deposit_vault.key().as_ref(), yield_vault.key().as_ref()],
         bump)]
-    pub vault_manager: Account<'info, VaultManager>,
+    pub vault_manager: Box<Account<'info, VaultManager>>,
 
     #[account(mut)]
     pub tickets: Account<'info, token::Mint>,
@@ -413,13 +454,13 @@ pub struct Dispense<'info> {
     #[account(init_if_needed, payer = user, seeds = [&numbers, vault_manager.key().as_ref()], bump)]
     pub ticket: Box<Account<'info, Ticket>>,
 
-    #[account(mut, has_one = mint)]
+    #[account(mut)]
     pub prize: Box<Account<'info, token::TokenAccount>>,
 
     #[account(mut)]
     pub user: Signer<'info>,
 
-    #[account(mut, has_one = mint)]
+    #[account(mut)]
     pub user_deposit_ata: Account<'info, token::TokenAccount>,
 
     pub system_program: Program<'info, System>,
@@ -429,8 +470,10 @@ pub struct Dispense<'info> {
 #[account]
 #[derive(Default)]
 pub struct VaultManager {
-    pub mint: Pubkey,
-    pub vault: Pubkey,
+    pub deposit_mint: Pubkey,
+    pub deposit_vault: Pubkey,
+    pub yield_mint: Pubkey,
+    pub yield_vault: Pubkey,
     pub tickets: Pubkey,
     pub cutoff_time: u64,   // in seconds, cutoff time for next draw
     pub draw_duration: u64, // in seconds, duration until next draw time
