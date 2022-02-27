@@ -510,15 +510,20 @@ describe("SwapTokens", () => {
 
     const config = await initialize(program, drawDurationSeconds);
 
-    // buy a bunch of tickets
-    let buyPromises = [];
-    for (let i = 0; i < 10; i++) {
-      buyPromises.push(buy(program, [1 + i, 2, 3, 4, 5, 6], config, null));
-    }
-    Promise.all(buyPromises);
+    // buy several tickets to add funds to deposit_vault
+    await buyNTickets(program, config, 10);
 
     // swap tokens to yield bearing tokens and put in yield vault
-    await swapTokens(program, config, 5, 2, null);
+    const amountIn = 5;
+    const minAmountOut = 2;
+    await swapTokens(program, config, amountIn, minAmountOut, null);
+
+    // check tokens in yield vault
+    await assertAtLeastBalance(
+      program,
+      config.keys.get(YIELD_VAULT),
+      minAmountOut
+    );
   });
 });
 
@@ -1021,10 +1026,21 @@ async function assertBalance(
   account: anchor.web3.PublicKey,
   expectedBalance: number
 ) {
-  const balance = (await (
+  const balance = await (
     await program.provider.connection.getTokenAccountBalance(account)
-  ).value.amount) as unknown as number;
+  ).value.amount.valueOf();
   assert.equal(balance, expectedBalance);
+}
+
+async function assertAtLeastBalance(
+  program: Program<NoLossLottery>,
+  account: anchor.web3.PublicKey,
+  expectedBalance: number
+) {
+  const balance = await (
+    await program.provider.connection.getTokenAccountBalance(account)
+  ).value.amount.valueOf();
+  assert.ok(Number(balance) >= expectedBalance);
 }
 
 function assertPublicKey(
@@ -1033,4 +1049,19 @@ function assertPublicKey(
   key2: anchor.web3.PublicKey
 ) {
   return f(key1.toString(), key2.toString());
+}
+
+async function buyNTickets(
+  program: Program<NoLossLottery>,
+  config: Config,
+  count: Number
+) {
+  // buy a bunch of tickets
+  let buyPromises = [];
+  for (let i = 0; i < count; i++) {
+    buyPromises.push(buy(program, [1 + i, 2, 3, 4, 5, 6], config, null));
+  }
+  await Promise.all(buyPromises);
+
+  console.log("%d tickets purchased", count)
 }
