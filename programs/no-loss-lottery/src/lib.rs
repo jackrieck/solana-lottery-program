@@ -294,7 +294,6 @@ pub mod no_loss_lottery {
         // swap all tokens from yield vault to deposit vault
         let amount_in = ctx.accounts.yield_vault.amount;
         let minimum_amount_out = amount_in / 2; // TODO: how to configure slippage?
-        msg!("yield_vault_amount: {}, minimum_amount_out: {}", amount_in, minimum_amount_out);
 
         // tell the vault manager to approve the user calling this function to swap
         let approve_accounts = token::Approve {
@@ -358,7 +357,10 @@ pub mod no_loss_lottery {
 
         // swap tokens
         match anchor_lang::solana_program::program::invoke(&ix, &accounts) {
-            Ok(()) => {}
+            Ok(()) => {
+                // reload account to see updated deposit_vault amount
+                ctx.accounts.deposit_vault.reload()?;
+            }
             Err(e) => return Err(e.into()),
         };
 
@@ -368,11 +370,8 @@ pub mod no_loss_lottery {
 
         // not enough gains for a prize
         // set amount to 0, so we can unlock the vault and continue the lottery
-        // TODO: do we swap back to yield vault or let the `stake` instruction get called?
         if prize_amount <= 0 {
-            msg!("prize_amount: {}, deposit_amount: {}, deposit_vault_amount: {}", prize_amount, deposit_amount, ctx.accounts.deposit_vault.amount);
             prize_amount = 0;
-            //return Err(error!(ErrorCode::NotEnoughTokens));
         }
 
         // transfer prize amount to winner

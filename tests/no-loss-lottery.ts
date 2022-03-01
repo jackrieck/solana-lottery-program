@@ -349,7 +349,7 @@ describe("Dispense", () => {
   anchor.setProvider(anchor.Provider.env());
   const program = anchor.workspace.NoLossLottery as Program<NoLossLottery>;
 
-  it.only("Call dispense after draw, winner found", async () => {
+  it("Call dispense after draw, winner found", async () => {
     const drawDurationSeconds = 1;
     const userDepositAtaBalance = 1;
     const yieldVaultInitBalance = 10;
@@ -361,12 +361,6 @@ describe("Dispense", () => {
     const numbers = [1, 2, 3, 4, 5, 6];
     await buy(program, numbers, config, null);
 
-    await assertBalance(
-      program,
-      config.keys.get(DEPOSIT_VAULT),
-      1, 
-    );
-
     await sleep(drawDurationSeconds + 1);
 
     // draw winning ticket
@@ -375,16 +369,18 @@ describe("Dispense", () => {
     // dispense prize to winner
     await dispense(program, config, numbers, null);
 
+    // check the deposit vault only contains the amount from the ticket purchase
     await assertBalance(
       program,
       config.keys.get(DEPOSIT_VAULT),
-      8, 
+      userDepositAtaBalance, 
     );
 
+    // check user received prize amount - fees
     await assertBalance(
       program,
       config.keys.get(USER_DEPOSIT_ATA),
-      yieldVaultInitBalance 
+      yieldVaultInitBalance - 3, // swap fees reduce amount returned as prize
     );
   });
 
