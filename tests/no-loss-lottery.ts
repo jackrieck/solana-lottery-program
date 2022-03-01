@@ -12,9 +12,14 @@ const YIELD_MINT = "YIELD_MINT";
 const VAULT_MANAGER = "VAULT_MANAGER";
 const MINT_AUTHORITY = "MINT_AUTHORITY";
 const TICKETS = "TICKETS";
-const PRIZE = "PRIZE";
 const USER_DEPOSIT_ATA = "USER_DEPOSIT_ATA";
 const USER_TICKET_ATA = "USER_TICKET_ATA";
+const SWAP_YIELD_VAULT = "SWAP_YIELD_VAULT";
+const SWAP_DEPOSIT_VAULT = "SWAP_DEPOSIT_VAULT";
+const POOL_MINT = "POOL_MINT";
+const TOKEN_SWAP_ACCOUNT = "TOKEN_SWAP_ACCOUNT";
+const TOKEN_SWAP_ACCOUNT_AUTHORITY = "TOKEN_SWAP_ACCOUNT_AUTHORITY";
+const POOL_FEE = "POOL_FEE";
 
 const PRIZE_AMOUNT = 100;
 
@@ -156,6 +161,7 @@ describe("Redeem", () => {
   it("Redeem ticket", async () => {
     const drawDurationSeconds = 1;
     const config = await initialize(program, drawDurationSeconds, 1);
+    await tokenSwapInit(program, config);
 
     // choose your lucky numbers!
     const numbers = [1, 2, 3, 4, 5, 6];
@@ -174,6 +180,7 @@ describe("Redeem", () => {
   it("Redeem 2 tickets", async () => {
     const drawDurationSeconds = 1;
     const config = await initialize(program, drawDurationSeconds, 2);
+    await tokenSwapInit(program, config);
 
     // choose your lucky numbers!
     const numbers1 = [1, 2, 3, 4, 5, 6];
@@ -195,6 +202,7 @@ describe("Redeem", () => {
   it("Redeem same ticket twice", async () => {
     const drawDurationSeconds = 1;
     const config = await initialize(program, drawDurationSeconds);
+    await tokenSwapInit(program, config);
 
     // choose your lucky numbers!
     const numbers = [1, 2, 3, 4, 5, 6];
@@ -208,6 +216,49 @@ describe("Redeem", () => {
 
     // we get our token back
     await assertBalance(program, config.keys.get(USER_DEPOSIT_ATA), 100);
+  });
+
+  it("Redeem ticket, not enough liquidity in deposit_vault", async () => {
+    const drawDurationSeconds = 1;
+    const userDepositAtaBalance = 100;
+    const config = await initialize(
+      program,
+      drawDurationSeconds,
+      userDepositAtaBalance
+    );
+    await tokenSwapInit(program, config);
+
+    // choose your lucky numbers!
+    // do not clash with buyNTickets
+    const numbers = [1, 2, 3, 4, 5, 60];
+
+    const [ticket, ticketBump] = await buy(program, numbers, config, null);
+
+    // buy enough tickets so that stake will work
+    const ticketCount = 10;
+    await buyNTickets(program, config, 10);
+
+    // balance is 0 after buying a ticket
+    // account for 10 tickets bought + single ticket bought
+    const totalTicketsPurchased = userDepositAtaBalance - 1 - ticketCount;
+    await assertBalance(
+      program,
+      config.keys.get(USER_DEPOSIT_ATA),
+      totalTicketsPurchased
+    );
+
+    // stake tokens in deposit_vault
+    await stake(program, config);
+
+    // redeem now, not enough tokens in deposit_vault
+    await redeem(program, config, ticket, ticketBump, null);
+
+    // we get 1 deposit_token back after a single redeem call
+    await assertBalance(
+      program,
+      config.keys.get(USER_DEPOSIT_ATA),
+      totalTicketsPurchased + 1
+    );
   });
 });
 
@@ -294,7 +345,7 @@ describe("Draw", () => {
   });
 });
 
-describe("Dispense", () => {
+describe.only("Dispense", () => {
   anchor.setProvider(anchor.Provider.env());
   const program = anchor.workspace.NoLossLottery as Program<NoLossLottery>;
 
@@ -302,6 +353,7 @@ describe("Dispense", () => {
     const drawDurationSeconds = 1;
 
     const config = await initialize(program, drawDurationSeconds, 1);
+    await tokenSwapInit(program, config);
 
     const numbers = [1, 2, 3, 4, 5, 6];
 
@@ -328,6 +380,7 @@ describe("Dispense", () => {
       drawDurationSeconds,
       userDepositAtaBalance
     );
+    await tokenSwapInit(program, config);
 
     // deliberatly choose a non winning combination
     const numbers = [7, 8, 9, 10, 11, 12];
@@ -358,6 +411,7 @@ describe("Dispense", () => {
       drawDurationSeconds,
       userDepositAtaBalance
     );
+    await tokenSwapInit(program, config);
 
     // deliberatly choose a non winning combination
     const numbers = [7, 8, 9, 10, 11, 12];
@@ -384,6 +438,7 @@ describe("Dispense", () => {
       drawDurationSeconds,
       userDepositAtaBalance
     );
+    await tokenSwapInit(program, config);
 
     // deliberatly choose a non winning combination
     const numbers = [7, 8, 9, 10, 11, 12];
@@ -420,6 +475,7 @@ describe("Dispense", () => {
       drawDurationSeconds,
       userDepositAtaBalance
     );
+    await tokenSwapInit(program, config);
 
     // deliberatly choose a non winning combination
     const numbers = [7, 8, 9, 10, 11, 12];
@@ -460,6 +516,7 @@ describe("Dispense", () => {
       drawDurationSeconds,
       userDepositAtaBalance
     );
+    await tokenSwapInit(program, config);
 
     // choose winning numbers
     const numbers = [1, 2, 3, 4, 5, 6];
@@ -501,29 +558,21 @@ describe("Dispense", () => {
   });
 });
 
-describe("SwapTokens", () => {
+describe("Stake", () => {
   anchor.setProvider(anchor.Provider.env());
   const program = anchor.workspace.NoLossLottery as Program<NoLossLottery>;
 
-  it("SwapTokens", async () => {
+  it("Stake successfully after 10 ticket purchases", async () => {
     const drawDurationSeconds = 1;
 
     const config = await initialize(program, drawDurationSeconds);
+    await tokenSwapInit(program, config);
 
     // buy several tickets to add funds to deposit_vault
     await buyNTickets(program, config, 10);
 
     // swap tokens to yield bearing tokens and put in yield vault
-    const amountIn = 5;
-    const minAmountOut = 2;
-    await swapTokens(program, config, amountIn, minAmountOut, null);
-
-    // check tokens in yield vault
-    await assertAtLeastBalance(
-      program,
-      config.keys.get(YIELD_VAULT),
-      minAmountOut
-    );
+    await stake(program, config, null);
   });
 });
 
@@ -556,7 +605,8 @@ async function sleep(seconds: number) {
 async function initialize(
   program: Program<NoLossLottery>,
   drawDurationSeconds: number,
-  userDepositAtaBalance = 100
+  userDepositAtaBalance = 100,
+  yieldVaultInitBalance = 0
 ): Promise<Config> {
   const mintAuthority = await newAccountWithLamports(
     program.provider.connection
@@ -618,18 +668,6 @@ async function initialize(
     program.programId
   );
 
-  const [prize, prizeBump] = await anchor.web3.PublicKey.findProgramAddress(
-    [
-      depositMint.toBuffer(),
-      yieldMint.toBuffer(),
-      depositVault.toBuffer(),
-      yieldVault.toBuffer(),
-      vaultMgr.toBuffer(),
-      tickets.toBuffer(),
-    ],
-    program.programId
-  );
-
   // ticket price in tokens
   const ticketPrice = new anchor.BN(1);
 
@@ -645,7 +683,6 @@ async function initialize(
         yieldVault: yieldVault,
         vaultManager: vaultMgr,
         tickets: tickets,
-        prize: prize,
         user: program.provider.wallet.publicKey,
         systemProgram: anchor.web3.SystemProgram.programId,
         tokenProgram: spl.TOKEN_PROGRAM_ID,
@@ -682,16 +719,16 @@ async function initialize(
     program.provider.wallet.publicKey
   );
 
-  // mint tokens to prize for testing
+  // mint tokens to yield vault for testing
   await spl.mintTo(
     program.provider.connection,
     mintAuthority,
-    depositMint,
-    prize,
+    yieldMint,
+    yieldVault,
     mintAuthority.publicKey,
-    PRIZE_AMOUNT
+    yieldVaultInitBalance
   );
-  console.log("minted %d tokens to prize ata", PRIZE_AMOUNT);
+  console.log("minted %d tokens to yield ata", yieldVaultInitBalance);
 
   let keys = new Map<String, anchor.web3.PublicKey>();
   keys.set(DEPOSIT_VAULT, depositVault);
@@ -701,7 +738,6 @@ async function initialize(
   keys.set(VAULT_MANAGER, vaultMgr);
   keys.set(MINT_AUTHORITY, mintAuthority.publicKey);
   keys.set(TICKETS, tickets);
-  keys.set(PRIZE, prize);
   keys.set(USER_DEPOSIT_ATA, userDepositAta.address);
   keys.set(USER_TICKET_ATA, userTicketsAta.address);
 
@@ -771,13 +807,19 @@ async function redeem(
         depositVault: config.keys.get(DEPOSIT_VAULT),
         yieldMint: config.keys.get(YIELD_MINT),
         yieldVault: config.keys.get(YIELD_VAULT),
+        swapYieldVault: config.keys.get(SWAP_YIELD_VAULT),
+        swapDepositVault: config.keys.get(SWAP_DEPOSIT_VAULT),
+        poolMint: config.keys.get(POOL_MINT),
+        amm: config.keys.get(TOKEN_SWAP_ACCOUNT),
+        ammAuthority: config.keys.get(TOKEN_SWAP_ACCOUNT_AUTHORITY),
+        poolFee: config.keys.get(POOL_FEE),
         tickets: config.keys.get(TICKETS),
         vaultManager: config.keys.get(VAULT_MANAGER),
         ticket: ticket,
-        prize: config.keys.get(PRIZE),
         userTicketsAta: config.keys.get(USER_TICKET_ATA),
         user: program.provider.wallet.publicKey,
         userDepositAta: config.keys.get(USER_DEPOSIT_ATA),
+        tokenSwapProgram: tokenSwap.TOKEN_SWAP_PROGRAM_ID,
         systemProgram: anchor.web3.SystemProgram.programId,
         tokenProgram: spl.TOKEN_PROGRAM_ID,
         rent: anchor.web3.SYSVAR_RENT_PUBKEY,
@@ -852,9 +894,15 @@ async function dispense(
         tickets: config.keys.get(TICKETS),
         vaultManager: config.keys.get(VAULT_MANAGER),
         ticket: ticket,
-        prize: config.keys.get(PRIZE),
+        swapYieldVault: config.keys.get(SWAP_YIELD_VAULT),
+        swapDepositVault: config.keys.get(SWAP_DEPOSIT_VAULT),
+        poolMint: config.keys.get(POOL_MINT),
+        amm: config.keys.get(TOKEN_SWAP_ACCOUNT),
+        ammAuthority: config.keys.get(TOKEN_SWAP_ACCOUNT_AUTHORITY),
+        poolFee: config.keys.get(POOL_FEE),
         user: program.provider.wallet.publicKey,
         userDepositAta: config.keys.get(USER_DEPOSIT_ATA),
+        tokenSwapProgram: tokenSwap.TOKEN_SWAP_PROGRAM_ID,
         systemProgram: anchor.web3.SystemProgram.programId,
         tokenProgram: spl.TOKEN_PROGRAM_ID,
       },
@@ -869,13 +917,43 @@ async function dispense(
   }
 }
 
-async function swapTokens(
+async function stake(
   program: Program<NoLossLottery>,
   config: Config,
-  amountIn: number,
-  minAmountOut: number,
   error = null
 ) {
+  try {
+    const stakeTxSig = await program.rpc.stake({
+      accounts: {
+        vaultManager: config.keys.get(VAULT_MANAGER),
+        depositMint: config.keys.get(DEPOSIT_MINT),
+        depositVault: config.keys.get(DEPOSIT_VAULT),
+        yieldMint: config.keys.get(YIELD_MINT),
+        yieldVault: config.keys.get(YIELD_VAULT),
+        swapYieldVault: config.keys.get(SWAP_YIELD_VAULT),
+        swapDepositVault: config.keys.get(SWAP_DEPOSIT_VAULT),
+        poolMint: config.keys.get(POOL_MINT),
+        amm: config.keys.get(TOKEN_SWAP_ACCOUNT),
+        ammAuthority: config.keys.get(TOKEN_SWAP_ACCOUNT_AUTHORITY),
+        poolFee: config.keys.get(POOL_FEE),
+        user: program.provider.wallet.publicKey,
+        tokenSwapProgram: tokenSwap.TOKEN_SWAP_PROGRAM_ID,
+        tokenProgram: spl.TOKEN_PROGRAM_ID,
+        systemProgram: anchor.web3.SystemProgram.programId,
+        rent: anchor.web3.SYSVAR_RENT_PUBKEY,
+      },
+    });
+    console.log("stakeTxSig:", stakeTxSig);
+  } catch (e) {
+    if (error) {
+      assert.equal(e.code, error);
+    } else {
+      throw e;
+    }
+  }
+}
+
+async function tokenSwapInit(program: Program<NoLossLottery>, config: Config) {
   // Pool fees
   const TRADING_FEE_NUMERATOR = 25;
   const TRADING_FEE_DENOMINATOR = 10000;
@@ -886,139 +964,111 @@ async function swapTokens(
   const HOST_FEE_NUMERATOR = 20;
   const HOST_FEE_DENOMINATOR = 100;
 
-  try {
-    const tokenSwapAccount = new anchor.web3.Account();
+  const tokenSwapAccount = new anchor.web3.Account();
 
-    const [tokenSwapAccountAuthority, tokenSwapAccountAuthorityBump] =
-      await anchor.web3.PublicKey.findProgramAddress(
-        [tokenSwapAccount.publicKey.toBuffer()],
-        tokenSwap.TOKEN_SWAP_PROGRAM_ID
-      );
+  const [tokenSwapAccountAuthority, tokenSwapAccountAuthorityBump] =
+    await anchor.web3.PublicKey.findProgramAddress(
+      [tokenSwapAccount.publicKey.toBuffer()],
+      tokenSwap.TOKEN_SWAP_PROGRAM_ID
+    );
 
-    // create pool mint
+  // create pool mint
 
-    const tokenPoolMint = await spl.createMint(
-      program.provider.connection,
-      config.mintAuthority,
-      tokenSwapAccountAuthority,
-      null,
-      2
-    );
-    console.log("created pool mint");
+  const tokenPoolMint = await spl.createMint(
+    program.provider.connection,
+    config.mintAuthority,
+    tokenSwapAccountAuthority,
+    null,
+    2
+  );
+  console.log("created pool mint");
 
-    const feeAccount = await spl.getOrCreateAssociatedTokenAccount(
-      program.provider.connection,
-      config.mintAuthority,
-      tokenPoolMint,
-      new anchor.web3.PublicKey("HfoTxFR1Tm6kGmWgYWD6J7YHVy1UwqSULUGVLXkJqaKN"),
-      true
-    );
-    console.log("fee account created");
+  const feeAccount = await spl.getOrCreateAssociatedTokenAccount(
+    program.provider.connection,
+    config.mintAuthority,
+    tokenPoolMint,
+    new anchor.web3.PublicKey("HfoTxFR1Tm6kGmWgYWD6J7YHVy1UwqSULUGVLXkJqaKN"),
+    true
+  );
+  console.log("fee account created");
 
-    // create swap token accounts
-    const swapPoolMintTokenAccount =
-      await spl.getOrCreateAssociatedTokenAccount(
-        program.provider.connection,
-        config.mintAuthority,
-        tokenPoolMint,
-        config.mintAuthority.publicKey,
-        false
-      );
-    const swapDepositVault = await spl.getOrCreateAssociatedTokenAccount(
-      program.provider.connection,
-      config.mintAuthority,
-      config.keys.get(DEPOSIT_MINT),
-      tokenSwapAccountAuthority,
-      true
-    );
-    const swapYieldVault = await spl.getOrCreateAssociatedTokenAccount(
-      program.provider.connection,
-      config.mintAuthority,
-      config.keys.get(YIELD_MINT),
-      tokenSwapAccountAuthority,
-      true
-    );
-    console.log("created swap pool mint token accounts");
+  // create swap token accounts
+  const swapPoolMintTokenAccount = await spl.getOrCreateAssociatedTokenAccount(
+    program.provider.connection,
+    config.mintAuthority,
+    tokenPoolMint,
+    config.mintAuthority.publicKey,
+    false
+  );
+  const swapDepositVault = await spl.getOrCreateAssociatedTokenAccount(
+    program.provider.connection,
+    config.mintAuthority,
+    config.keys.get(DEPOSIT_MINT),
+    tokenSwapAccountAuthority,
+    true
+  );
+  const swapYieldVault = await spl.getOrCreateAssociatedTokenAccount(
+    program.provider.connection,
+    config.mintAuthority,
+    config.keys.get(YIELD_MINT),
+    tokenSwapAccountAuthority,
+    true
+  );
+  console.log("created swap pool mint token accounts");
 
-    // mint initial tokens to swap token accounts
-    await spl.mintTo(
-      program.provider.connection,
-      config.mintAuthority,
-      config.keys.get(DEPOSIT_MINT),
-      swapDepositVault.address,
-      config.mintAuthority,
-      1000
-    );
-    await spl.mintTo(
-      program.provider.connection,
-      config.mintAuthority,
-      config.keys.get(YIELD_MINT),
-      swapYieldVault.address,
-      config.mintAuthority,
-      1000
-    );
-    console.log("minted initial tokens to swap token accounts");
+  // mint initial tokens to swap token accounts
+  await spl.mintTo(
+    program.provider.connection,
+    config.mintAuthority,
+    config.keys.get(DEPOSIT_MINT),
+    swapDepositVault.address,
+    config.mintAuthority,
+    100000
+  );
+  await spl.mintTo(
+    program.provider.connection,
+    config.mintAuthority,
+    config.keys.get(YIELD_MINT),
+    swapYieldVault.address,
+    config.mintAuthority,
+    100000
+  );
+  console.log("minted initial tokens to swap token accounts");
 
-    await tokenSwap.TokenSwap.createTokenSwap(
-      program.provider.connection,
-      config.mintAuthority,
-      tokenSwapAccount,
-      tokenSwapAccountAuthority,
-      swapDepositVault.address,
-      swapYieldVault.address,
-      tokenPoolMint,
-      config.keys.get(DEPOSIT_MINT),
-      config.keys.get(YIELD_MINT),
-      feeAccount.address,
-      swapPoolMintTokenAccount.address,
-      tokenSwap.TOKEN_SWAP_PROGRAM_ID,
-      spl.TOKEN_PROGRAM_ID,
-      tokenSwapAccountAuthorityBump,
-      TRADING_FEE_NUMERATOR,
-      TRADING_FEE_DENOMINATOR,
-      OWNER_TRADING_FEE_NUMERATOR,
-      OWNER_TRADING_FEE_DENOMINATOR,
-      OWNER_WITHDRAW_FEE_NUMERATOR,
-      OWNER_WITHDRAW_FEE_DENOMINATOR,
-      HOST_FEE_NUMERATOR,
-      HOST_FEE_DENOMINATOR,
-      tokenSwap.CurveType.ConstantProduct
-    );
-    console.log("tokenSwap pool created");
+  await tokenSwap.TokenSwap.createTokenSwap(
+    program.provider.connection,
+    config.mintAuthority,
+    tokenSwapAccount,
+    tokenSwapAccountAuthority,
+    swapDepositVault.address,
+    swapYieldVault.address,
+    tokenPoolMint,
+    config.keys.get(DEPOSIT_MINT),
+    config.keys.get(YIELD_MINT),
+    feeAccount.address,
+    swapPoolMintTokenAccount.address,
+    tokenSwap.TOKEN_SWAP_PROGRAM_ID,
+    spl.TOKEN_PROGRAM_ID,
+    tokenSwapAccountAuthorityBump,
+    TRADING_FEE_NUMERATOR,
+    TRADING_FEE_DENOMINATOR,
+    OWNER_TRADING_FEE_NUMERATOR,
+    OWNER_TRADING_FEE_DENOMINATOR,
+    OWNER_WITHDRAW_FEE_NUMERATOR,
+    OWNER_WITHDRAW_FEE_DENOMINATOR,
+    HOST_FEE_NUMERATOR,
+    HOST_FEE_DENOMINATOR,
+    tokenSwap.CurveType.ConstantProduct
+  );
+  console.log("tokenSwap pool created");
 
-    const swapTokensTxSig = await program.rpc.swapTokens(
-      new anchor.BN(amountIn),
-      new anchor.BN(minAmountOut),
-      {
-        accounts: {
-          vaultManager: config.keys.get(VAULT_MANAGER),
-          depositMint: config.keys.get(DEPOSIT_MINT),
-          depositVault: config.keys.get(DEPOSIT_VAULT),
-          yieldMint: config.keys.get(YIELD_MINT),
-          yieldVault: config.keys.get(YIELD_VAULT),
-          swapYieldVault: swapYieldVault.address,
-          swapDepositVault: swapDepositVault.address,
-          poolMint: tokenPoolMint,
-          amm: tokenSwapAccount.publicKey,
-          ammAuthority: tokenSwapAccountAuthority,
-          poolFee: feeAccount.address,
-          user: program.provider.wallet.publicKey,
-          tokenSwapProgram: tokenSwap.TOKEN_SWAP_PROGRAM_ID,
-          tokenProgram: spl.TOKEN_PROGRAM_ID,
-          associatedTokenProgram: spl.ASSOCIATED_TOKEN_PROGRAM_ID,
-          systemProgram: anchor.web3.SystemProgram.programId,
-          rent: anchor.web3.SYSVAR_RENT_PUBKEY,
-        },
-      }
-    );
-    console.log("swapTokensTxSig:", swapTokensTxSig);
-  } catch (e) {
-    if (error) {
-      assert.equal(e.code, error);
-    } else {
-      throw e;
-    }
-  }
+  // set token swap keys
+  config.keys.set(SWAP_YIELD_VAULT, swapYieldVault.address);
+  config.keys.set(SWAP_DEPOSIT_VAULT, swapDepositVault.address);
+  config.keys.set(POOL_MINT, tokenPoolMint);
+  config.keys.set(TOKEN_SWAP_ACCOUNT, tokenSwapAccount.publicKey);
+  config.keys.set(TOKEN_SWAP_ACCOUNT_AUTHORITY, tokenSwapAccountAuthority);
+  config.keys.set(POOL_FEE, feeAccount.address);
 }
 
 async function assertBalance(

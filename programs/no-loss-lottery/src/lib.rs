@@ -100,27 +100,87 @@ pub mod no_loss_lottery {
 
     // redeem tickets for deposited tokens
     pub fn redeem(ctx: Context<Redeem>) -> Result<()> {
-        // burn a ticket from the user ATA
-        let burn_accounts = token::Burn {
-            mint: ctx.accounts.tickets.clone().to_account_info(),
-            to: ctx.accounts.user_tickets_ata.clone().to_account_info(),
-            authority: ctx.accounts.user.clone().to_account_info(),
-        };
+        // TODO: check lockout period
+        // TODO: check minimum amount in deposit_vault
+        // TODO: check minimum amount in yield_vault
 
-        // burn the ticket, we dont need to hold onto it
-        token::burn(
-            CpiContext::new(
+        // check if not enough tokens in deposit_vault for redemption, do a swap from yield to deposit vault
+        let deposit_vault_amount = ctx.accounts.deposit_vault.amount;
+        let ticket_price = ctx.accounts.vault_manager.ticket_price;
+        if deposit_vault_amount < ticket_price {
+            //msg!("Not enough tokens in deposit_vault: {}, required amount: {}, swapping from yield_vault to redeem user", deposit_vault_amount, ticket_price);
+
+            // double it to make sure we can get our minimum_amount_out
+            // TODO: what to do if we dont have enough in yield_vault?
+            let amount_in = ticket_price * 5;
+
+            // swap tokens from yield_vault to deposit_vault
+            // tell the vault manager to approve the user calling this function to swap
+            let approve_accounts = token::Approve {
+                to: ctx.accounts.yield_vault.clone().to_account_info(),
+                delegate: ctx.accounts.user.clone().to_account_info(),
+                authority: ctx.accounts.vault_manager.clone().to_account_info(),
+            };
+
+            token::approve(
+                CpiContext::new_with_signer(
+                    ctx.accounts.token_program.clone().to_account_info(),
+                    approve_accounts,
+                    &[&[
+                        ctx.accounts.deposit_mint.clone().key().as_ref(),
+                        ctx.accounts.yield_mint.clone().key().as_ref(),
+                        ctx.accounts.deposit_vault.clone().key().as_ref(),
+                        ctx.accounts.yield_vault.clone().key().as_ref(),
+                        &[*ctx.bumps.get("vault_manager").unwrap()],
+                    ]],
+                ),
+                amount_in,
+            )?;
+
+            // accounts array
+            let accounts = [
+                ctx.accounts.token_swap_program.clone(),
                 ctx.accounts.token_program.clone().to_account_info(),
-                burn_accounts,
-            ),
-            1,
-        )?;
+                ctx.accounts.amm.clone(),
+                ctx.accounts.amm_authority.clone(),
+                ctx.accounts.user.clone().to_account_info(),
+                ctx.accounts.deposit_vault.clone().to_account_info(),
+                ctx.accounts.swap_deposit_vault.clone().to_account_info(),
+                ctx.accounts.swap_yield_vault.clone().to_account_info(),
+                ctx.accounts.yield_vault.clone().to_account_info(),
+                ctx.accounts.pool_mint.clone().to_account_info(),
+                ctx.accounts.pool_fee.clone().to_account_info(),
+            ];
 
-        // close ticket PDA
-        // return SOL to user
-        ctx.accounts
-            .ticket
-            .close(ctx.accounts.user.clone().to_account_info())?;
+            // set data for swap instruction
+            let data = Swap {
+                amount_in: amount_in,
+                minimum_amount_out: ticket_price,
+            };
+
+            // create swap instruction
+            let ix = swap(
+                &ctx.accounts.token_swap_program.clone().key(),
+                &ctx.accounts.token_program.clone().key(),
+                &ctx.accounts.amm.clone().key(),
+                &ctx.accounts.amm_authority.clone().key(),
+                &ctx.accounts.user.clone().key(),
+                &ctx.accounts.yield_vault.clone().key(),
+                &ctx.accounts.swap_yield_vault.clone().key(),
+                &ctx.accounts.swap_deposit_vault.clone().key(),
+                &ctx.accounts.deposit_vault.clone().key(),
+                &ctx.accounts.pool_mint.clone().key(),
+                &ctx.accounts.pool_fee.clone().key(),
+                None,
+                data,
+            )?;
+
+            // swap tokens
+            match anchor_lang::solana_program::program::invoke(&ix, &accounts) {
+                Ok(()) => {}
+                Err(e) => return Err(e.into()),
+            };
+        }
 
         let transfer_accounts = token::Transfer {
             from: ctx.accounts.deposit_vault.clone().to_account_info(),
@@ -142,7 +202,29 @@ pub mod no_loss_lottery {
                 ]],
             ),
             ctx.accounts.vault_manager.ticket_price,
-        )
+        )?;
+
+        // burn a ticket from the user ATA
+        let burn_accounts = token::Burn {
+            mint: ctx.accounts.tickets.clone().to_account_info(),
+            to: ctx.accounts.user_tickets_ata.clone().to_account_info(),
+            authority: ctx.accounts.user.clone().to_account_info(),
+        };
+
+        // burn the ticket, we dont need to hold onto it
+        token::burn(
+            CpiContext::new(
+                ctx.accounts.token_program.clone().to_account_info(),
+                burn_accounts,
+            ),
+            1,
+        )?;
+
+        // close ticket PDA
+        // return tokens to user
+        ctx.accounts
+            .ticket
+            .close(ctx.accounts.user.clone().to_account_info())
     }
 
     pub fn draw(ctx: Context<Draw>) -> Result<()> {
@@ -209,8 +291,89 @@ pub mod no_loss_lottery {
                 .close(ctx.accounts.user.to_account_info());
         }
 
+        // swap all tokens from yield vault to deposit vault
+        let amount_in = ctx.accounts.yield_vault.amount;
+
+        // tell the vault manager to approve the user calling this function to swap
+        let approve_accounts = token::Approve {
+            to: ctx.accounts.yield_vault.clone().to_account_info(),
+            delegate: ctx.accounts.user.clone().to_account_info(),
+            authority: ctx.accounts.vault_manager.clone().to_account_info(),
+        };
+
+        token::approve(
+            CpiContext::new_with_signer(
+                ctx.accounts.token_program.clone().to_account_info(),
+                approve_accounts,
+                &[&[
+                    ctx.accounts.deposit_mint.clone().key().as_ref(),
+                    ctx.accounts.yield_mint.clone().key().as_ref(),
+                    ctx.accounts.deposit_vault.clone().key().as_ref(),
+                    ctx.accounts.yield_vault.clone().key().as_ref(),
+                    &[*ctx.bumps.get("vault_manager").unwrap()],
+                ]],
+            ),
+            amount_in,
+        )?;
+
+        // accounts array
+        let accounts = [
+            ctx.accounts.token_swap_program.clone(),
+            ctx.accounts.token_program.clone().to_account_info(),
+            ctx.accounts.amm.clone(),
+            ctx.accounts.amm_authority.clone(),
+            ctx.accounts.user.clone().to_account_info(),
+            ctx.accounts.deposit_vault.clone().to_account_info(),
+            ctx.accounts.swap_deposit_vault.clone().to_account_info(),
+            ctx.accounts.swap_yield_vault.clone().to_account_info(),
+            ctx.accounts.yield_vault.clone().to_account_info(),
+            ctx.accounts.pool_mint.clone().to_account_info(),
+            ctx.accounts.pool_fee.clone().to_account_info(),
+        ];
+
+        // set data for swap instruction
+        let data = Swap {
+            amount_in: amount_in,
+            minimum_amount_out: amount_in / 2, // TODO: how to configure slippage?
+        };
+
+        // create swap instruction
+        let ix = swap(
+            &ctx.accounts.token_swap_program.clone().key(),
+            &ctx.accounts.token_program.clone().key(),
+            &ctx.accounts.amm.clone().key(),
+            &ctx.accounts.amm_authority.clone().key(),
+            &ctx.accounts.user.clone().key(),
+            &ctx.accounts.yield_vault.clone().key(),
+            &ctx.accounts.swap_yield_vault.clone().key(),
+            &ctx.accounts.swap_deposit_vault.clone().key(),
+            &ctx.accounts.deposit_vault.clone().key(),
+            &ctx.accounts.pool_mint.clone().key(),
+            &ctx.accounts.pool_fee.clone().key(),
+            None,
+            data,
+        )?;
+
+        // swap tokens
+        match anchor_lang::solana_program::program::invoke(&ix, &accounts) {
+            Ok(()) => {}
+            Err(e) => return Err(e.into()),
+        };
+
+        // (tickets_supply * ticket_price) - deposit_vault amount = prize amount
+        let total_amount = ctx.accounts.tickets.supply * ctx.accounts.vault_manager.ticket_price;
+        let mut prize_amount = total_amount - ctx.accounts.deposit_vault.amount;
+
+        // not enough gains for a prize
+        // set amount to 0, so we can unlock the vault and continue the lottery
+        // TODO: do we swap back to yield vault or let the `stake` instruction get called?
+        if prize_amount <= 0 {
+            prize_amount = 0
+        }
+
+        // transfer prize amount to winner
         let transfer_accounts = token::Transfer {
-            from: ctx.accounts.prize.clone().to_account_info(),
+            from: ctx.accounts.deposit_vault.clone().to_account_info(),
             to: ctx.accounts.user_deposit_ata.clone().to_account_info(),
             authority: ctx.accounts.vault_manager.clone().to_account_info(),
         };
@@ -228,16 +391,22 @@ pub mod no_loss_lottery {
                     &[*ctx.bumps.get("vault_manager").unwrap()],
                 ]],
             ),
-            ctx.accounts.prize.amount,
+            prize_amount,
         )
     }
 
-    // swap tokens via crank
-    pub fn swap_tokens(
-        ctx: Context<SwapTokens>,
-        amount_in: u64,
-        minimum_amount_out: u64,
-    ) -> Result<()> {
+    // convert deposit_mint tokens into yield_mint tokens
+    // call with a crank
+    pub fn stake(ctx: Context<Stake>) -> Result<()> {
+        let amount_in = ctx.accounts.deposit_vault.amount;
+
+        // if less than n tokens, do not stake
+        // wait for more tickets to be purchased
+        // TODO: store this config
+        if amount_in < 10 {
+            return Err(error!(ErrorCode::NotEnoughTokens));
+        };
+
         // tell the vault manager to approve the user calling this function to swap
         let approve_accounts = token::Approve {
             to: ctx.accounts.deposit_vault.clone().to_account_info(),
@@ -276,9 +445,12 @@ pub mod no_loss_lottery {
         ];
 
         // set data for swap instruction
+        // TODO: figure out best way to determine minimum_amount_out with least amount of slippage
+        // for now set to 50%
+        // TODO: store this config
         let data = Swap {
             amount_in: amount_in,
-            minimum_amount_out: minimum_amount_out,
+            minimum_amount_out: amount_in % 2,
         };
 
         // create swap instruction
@@ -299,11 +471,7 @@ pub mod no_loss_lottery {
         )?;
 
         // swap tokens
-        // TODO: how to do without match
-        match anchor_lang::solana_program::program::invoke(&ix, &accounts) {
-            Ok(_) => Ok(()),
-            Err(e) => Err(e.into()),
-        }
+        anchor_lang::solana_program::program::invoke(&ix, &accounts).map_err(|e| e.into())
     }
 }
 
@@ -343,15 +511,6 @@ pub struct Initialize<'info> {
         mint::decimals = 0,
     )]
     pub tickets: Account<'info, token::Mint>,
-
-    #[account(init,
-        payer = user,
-        seeds = [deposit_mint.key().as_ref(), yield_mint.key().as_ref(), deposit_vault.key().as_ref(), yield_vault.key().as_ref(), vault_manager.key().as_ref(), tickets.key().as_ref()],
-        bump,
-        token::mint = deposit_mint,
-        token::authority = vault_manager
-    )]
-    pub prize: Box<Account<'info, token::TokenAccount>>,
 
     #[account(mut)]
     pub user: Signer<'info>,
@@ -444,9 +603,6 @@ pub struct Redeem<'info> {
     #[account(mut)]
     pub ticket: Box<Account<'info, Ticket>>,
 
-    #[account(mut)]
-    pub prize: Box<Account<'info, token::TokenAccount>>,
-
     #[account(mut,
         associated_token::mint = tickets,
         associated_token::authority = user)]
@@ -455,9 +611,33 @@ pub struct Redeem<'info> {
     #[account(mut)]
     pub user: Signer<'info>,
 
+    // swap program token accounts
+    #[account(mut)]
+    pub swap_yield_vault: Box<Account<'info, token::TokenAccount>>,
+    #[account(mut)]
+    pub swap_deposit_vault: Box<Account<'info, token::TokenAccount>>,
+
+    // LP mint
+    #[account(mut)]
+    pub pool_mint: Account<'info, token::Mint>,
+
+    /// CHECK: TODO
+    #[account()]
+    pub amm: AccountInfo<'info>,
+
+    /// CHECK: TODO
+    #[account(mut)]
+    pub amm_authority: AccountInfo<'info>,
+
+    // fees go here
+    #[account(mut)]
+    pub pool_fee: Account<'info, token::TokenAccount>,
+
     #[account(mut)]
     pub user_deposit_ata: Account<'info, token::TokenAccount>,
 
+    /// CHECK: TODO
+    pub token_swap_program: AccountInfo<'info>,
     pub system_program: Program<'info, System>,
     pub token_program: Program<'info, token::Token>,
     pub rent: Sysvar<'info, Rent>,
@@ -529,8 +709,27 @@ pub struct Dispense<'info> {
     #[account(init_if_needed, payer = user, seeds = [&numbers, vault_manager.key().as_ref()], bump)]
     pub ticket: Box<Account<'info, Ticket>>,
 
+    // swap program token accounts
     #[account(mut)]
-    pub prize: Box<Account<'info, token::TokenAccount>>,
+    pub swap_yield_vault: Box<Account<'info, token::TokenAccount>>,
+    #[account(mut)]
+    pub swap_deposit_vault: Box<Account<'info, token::TokenAccount>>,
+
+    // LP mint
+    #[account(mut)]
+    pub pool_mint: Account<'info, token::Mint>,
+
+    /// CHECK: TODO
+    #[account()]
+    pub amm: AccountInfo<'info>,
+
+    /// CHECK: TODO
+    #[account(mut)]
+    pub amm_authority: AccountInfo<'info>,
+
+    // fees go here
+    #[account(mut)]
+    pub pool_fee: Account<'info, token::TokenAccount>,
 
     #[account(mut)]
     pub user: Signer<'info>,
@@ -538,12 +737,14 @@ pub struct Dispense<'info> {
     #[account(mut)]
     pub user_deposit_ata: Account<'info, token::TokenAccount>,
 
+    /// CHECK: TODO
+    pub token_swap_program: AccountInfo<'info>,
     pub system_program: Program<'info, System>,
     pub token_program: Program<'info, token::Token>,
 }
 
 #[derive(Accounts)]
-pub struct SwapTokens<'info> {
+pub struct Stake<'info> {
     // swap mints
     #[account()]
     pub yield_mint: Account<'info, token::Mint>,
@@ -593,7 +794,7 @@ pub struct SwapTokens<'info> {
     /// CHECK: TODO
     pub token_swap_program: AccountInfo<'info>,
     pub token_program: Program<'info, token::Token>,
-    pub associated_token_program: Program<'info, associated_token::AssociatedToken>,
+    //pub associated_token_program: Program<'info, associated_token::AssociatedToken>,
     pub system_program: Program<'info, System>,
     pub rent: Sysvar<'info, Rent>,
 }
@@ -639,6 +840,9 @@ pub enum ErrorCode {
 
     #[msg("Must Pass in Winning PDA to Dispense")]
     PassInWinningPDA,
+
+    #[msg("Not enough tokens for swap")]
+    NotEnoughTokens,
 }
 
 fn get_current_time() -> u64 {

@@ -38,3 +38,4 @@ No-loss lottery: Build a platform for users to deposit a variety of tokens into 
 - rename Vault Manager to manager
 - try to reduce PDA seed sprawl
 - `checked` functions research
+- rm prize account
