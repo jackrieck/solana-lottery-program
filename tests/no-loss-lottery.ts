@@ -345,30 +345,46 @@ describe("Draw", () => {
   });
 });
 
-describe.only("Dispense", () => {
+describe("Dispense", () => {
   anchor.setProvider(anchor.Provider.env());
   const program = anchor.workspace.NoLossLottery as Program<NoLossLottery>;
 
-  it("Call dispense after draw, winner found", async () => {
+  it.only("Call dispense after draw, winner found", async () => {
     const drawDurationSeconds = 1;
+    const userDepositAtaBalance = 1;
+    const yieldVaultInitBalance = 10;
 
-    const config = await initialize(program, drawDurationSeconds, 1);
+    const config = await initialize(program, drawDurationSeconds, userDepositAtaBalance, yieldVaultInitBalance);
     await tokenSwapInit(program, config);
 
+    // buy winning ticket
     const numbers = [1, 2, 3, 4, 5, 6];
+    await buy(program, numbers, config, null);
 
-    const [ticket, ticketBump] = await buy(program, numbers, config, null);
+    await assertBalance(
+      program,
+      config.keys.get(DEPOSIT_VAULT),
+      1, 
+    );
 
     await sleep(drawDurationSeconds + 1);
 
+    // draw winning ticket
     await draw(program, config, null);
 
+    // dispense prize to winner
     await dispense(program, config, numbers, null);
 
     await assertBalance(
       program,
+      config.keys.get(DEPOSIT_VAULT),
+      8, 
+    );
+
+    await assertBalance(
+      program,
       config.keys.get(USER_DEPOSIT_ATA),
-      PRIZE_AMOUNT
+      yieldVaultInitBalance 
     );
   });
 
@@ -728,7 +744,7 @@ async function initialize(
     mintAuthority.publicKey,
     yieldVaultInitBalance
   );
-  console.log("minted %d tokens to yield ata", yieldVaultInitBalance);
+  console.log("minted %d tokens to yield vault", yieldVaultInitBalance);
 
   let keys = new Map<String, anchor.web3.PublicKey>();
   keys.set(DEPOSIT_VAULT, depositVault);

@@ -293,6 +293,8 @@ pub mod no_loss_lottery {
 
         // swap all tokens from yield vault to deposit vault
         let amount_in = ctx.accounts.yield_vault.amount;
+        let minimum_amount_out = amount_in / 2; // TODO: how to configure slippage?
+        msg!("yield_vault_amount: {}, minimum_amount_out: {}", amount_in, minimum_amount_out);
 
         // tell the vault manager to approve the user calling this function to swap
         let approve_accounts = token::Approve {
@@ -334,7 +336,7 @@ pub mod no_loss_lottery {
         // set data for swap instruction
         let data = Swap {
             amount_in: amount_in,
-            minimum_amount_out: amount_in / 2, // TODO: how to configure slippage?
+            minimum_amount_out: minimum_amount_out,
         };
 
         // create swap instruction
@@ -360,15 +362,17 @@ pub mod no_loss_lottery {
             Err(e) => return Err(e.into()),
         };
 
-        // (tickets_supply * ticket_price) - deposit_vault amount = prize amount
-        let total_amount = ctx.accounts.tickets.supply * ctx.accounts.vault_manager.ticket_price;
-        let mut prize_amount = total_amount - ctx.accounts.deposit_vault.amount;
+        // deposit_vault amount - (tickets_supply * ticket_price) = prize amount
+        let deposit_amount = ctx.accounts.tickets.supply * ctx.accounts.vault_manager.ticket_price;
+        let mut prize_amount = ctx.accounts.deposit_vault.amount - deposit_amount;
 
         // not enough gains for a prize
         // set amount to 0, so we can unlock the vault and continue the lottery
         // TODO: do we swap back to yield vault or let the `stake` instruction get called?
         if prize_amount <= 0 {
-            prize_amount = 0
+            msg!("prize_amount: {}, deposit_amount: {}, deposit_vault_amount: {}", prize_amount, deposit_amount, ctx.accounts.deposit_vault.amount);
+            prize_amount = 0;
+            //return Err(error!(ErrorCode::NotEnoughTokens));
         }
 
         // transfer prize amount to winner
