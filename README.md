@@ -24,11 +24,11 @@ No-loss lottery: Build a platform for users to deposit a variety of tokens into 
 
 ## invest flow
 
-- crank calls `swap_tokens` periodically to exchange tokens `deposit` tokens in `deposit_vault` for `yield` tokens in `yield_vault`
+- crank calls `stake` periodically to exchange tokens `deposit` tokens in `deposit_vault` for `yield` tokens in `yield_vault` via an AMM
 - user calls `redeem`, first look in `deposit_vault` to see if we have enough liquidity.
 - if enough liquidity, transfer `deposit` tokens back to user`
 - if not call `swap_tokens` to get enough liquidity and transfer `deposit` tokens back to user.
-- if `dispense` finds winner, calculate prize amount and call `swap_tokens` to add `deposit` tokens to `prize` token account. Transfer from `prize` to user
+- if `dispense` finds winner, calculate prize amount and call `swap_tokens` to swap all `yield` tokens for `deposit` tokens, calculate prize and send to winner.
 
 ### TODO
 
@@ -40,3 +40,7 @@ No-loss lottery: Build a platform for users to deposit a variety of tokens into 
 - `checked` functions research
 - take % when prize is dispensed
 - change number array size
+- create admin account which deploys/collects fees/calls initialize
+- break up into multiple files
+- write init tests
+- add ticket purchase lock in for > 1 epoch

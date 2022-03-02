@@ -16,6 +16,16 @@ pub mod no_loss_lottery {
         draw_duration: u64,
         ticket_price: u64,
     ) -> Result<()> {
+        // ticket_price must be > 0
+        if ticket_price <= 0 {
+            return Err(error!(ErrorCode::InvalidTicketPrice));
+        }
+
+        // draw_duration must be > 0
+        if draw_duration <= 0 {
+            return Err(error!(ErrorCode::InvalidDrawDuration));
+        }
+
         // set vault manager config
         let vault_mgr = &mut ctx.accounts.vault_manager;
         vault_mgr.draw_duration = draw_duration;
@@ -26,6 +36,7 @@ pub mod no_loss_lottery {
         vault_mgr.yield_mint = ctx.accounts.yield_mint.clone().key();
         vault_mgr.yield_vault = ctx.accounts.yield_vault.clone().key();
         vault_mgr.tickets = ctx.accounts.tickets.clone().key();
+        vault_mgr.deposit_token_reserve = 10 * ticket_price;
 
         Ok(())
     }
@@ -53,7 +64,8 @@ pub mod no_loss_lottery {
 
         // create ticket PDA data
         let ticket_account = &mut ctx.accounts.ticket;
-        ticket_account.mint = ctx.accounts.deposit_mint.clone().key();
+        ticket_account.deposit_mint = ctx.accounts.deposit_mint.clone().key();
+        ticket_account.yield_mint = ctx.accounts.yield_mint.clone().key();
         ticket_account.vault = ctx.accounts.deposit_vault.clone().key();
         ticket_account.tickets = ctx.accounts.tickets.clone().key();
         ticket_account.owner = ctx.accounts.user.key();
@@ -101,15 +113,11 @@ pub mod no_loss_lottery {
     // redeem tickets for deposited tokens
     pub fn redeem(ctx: Context<Redeem>) -> Result<()> {
         // TODO: check lockout period
-        // TODO: check minimum amount in deposit_vault
-        // TODO: check minimum amount in yield_vault
 
         // check if not enough tokens in deposit_vault for redemption, do a swap from yield to deposit vault
         let deposit_vault_amount = ctx.accounts.deposit_vault.amount;
         let ticket_price = ctx.accounts.vault_manager.ticket_price;
         if deposit_vault_amount < ticket_price {
-            //msg!("Not enough tokens in deposit_vault: {}, required amount: {}, swapping from yield_vault to redeem user", deposit_vault_amount, ticket_price);
-
             // double it to make sure we can get our minimum_amount_out
             // TODO: what to do if we dont have enough in yield_vault?
             let amount_in = ticket_price * 5;
@@ -201,7 +209,7 @@ pub mod no_loss_lottery {
                     &[*ctx.bumps.get("vault_manager").unwrap()],
                 ]],
             ),
-            ctx.accounts.vault_manager.ticket_price,
+            ticket_price,
         )?;
 
         // burn a ticket from the user ATA
@@ -279,7 +287,7 @@ pub mod no_loss_lottery {
         // zero out winning numbers
         ctx.accounts.vault_manager.winning_numbers = [0u8; 6];
 
-        // if numbers are zeroed out this means this account was initialized in this transaction
+        // if numbers are zeroed out this means this account was initialized in this instruction
         // no winner found
         if ctx.accounts.ticket.numbers == [0u8; 6] {
             // we cannot error here because we need the variables to persist in the vault_manager account
@@ -294,6 +302,11 @@ pub mod no_loss_lottery {
         // swap all tokens from yield vault to deposit vault
         let amount_in = ctx.accounts.yield_vault.amount;
         let minimum_amount_out = amount_in / 2; // TODO: how to configure slippage?
+
+        // if amount_in is 0 or less, return without error
+        if amount_in <= 0 {
+            return Ok(());
+        }
 
         // tell the vault manager to approve the user calling this function to swap
         let approve_accounts = token::Approve {
@@ -358,21 +371,19 @@ pub mod no_loss_lottery {
         // swap tokens
         match anchor_lang::solana_program::program::invoke(&ix, &accounts) {
             Ok(()) => {
-                // reload account to see updated deposit_vault amount
+                // reload account to update deposit_vault amount
                 ctx.accounts.deposit_vault.reload()?;
             }
             Err(e) => return Err(e.into()),
         };
 
-        // deposit_vault amount - (tickets_supply * ticket_price) = prize amount
-        let deposit_amount = ctx.accounts.tickets.supply * ctx.accounts.vault_manager.ticket_price;
-        let mut prize_amount = ctx.accounts.deposit_vault.amount - deposit_amount;
-
-        // not enough gains for a prize
-        // set amount to 0, so we can unlock the vault and continue the lottery
-        if prize_amount <= 0 {
-            prize_amount = 0;
-        }
+        // calculate winner prize
+        // TODO: add our fee
+        let prize_amount = calculate_prize(
+            ctx.accounts.tickets.supply,
+            ctx.accounts.vault_manager.ticket_price,
+            ctx.accounts.deposit_vault.amount,
+        );
 
         // transfer prize amount to winner
         let transfer_accounts = token::Transfer {
@@ -401,14 +412,16 @@ pub mod no_loss_lottery {
     // convert deposit_mint tokens into yield_mint tokens
     // call with a crank
     pub fn stake(ctx: Context<Stake>) -> Result<()> {
-        let amount_in = ctx.accounts.deposit_vault.amount;
+        let mut amount_in = ctx.accounts.deposit_vault.amount;
 
         // if less than n tokens, do not stake
         // wait for more tickets to be purchased
-        // TODO: store this config
-        if amount_in < 10 {
+        if amount_in < ctx.accounts.vault_manager.deposit_token_reserve {
             return Err(error!(ErrorCode::NotEnoughTokens));
         };
+
+        // subtract reserve from amount to stake
+        amount_in = amount_in - ctx.accounts.vault_manager.deposit_token_reserve;
 
         // tell the vault manager to approve the user calling this function to swap
         let approve_accounts = token::Approve {
@@ -450,10 +463,9 @@ pub mod no_loss_lottery {
         // set data for swap instruction
         // TODO: figure out best way to determine minimum_amount_out with least amount of slippage
         // for now set to 50%
-        // TODO: store this config
         let data = Swap {
             amount_in: amount_in,
-            minimum_amount_out: amount_in % 2,
+            minimum_amount_out: amount_in / 2,
         };
 
         // create swap instruction
@@ -797,7 +809,6 @@ pub struct Stake<'info> {
     /// CHECK: TODO
     pub token_swap_program: AccountInfo<'info>,
     pub token_program: Program<'info, token::Token>,
-    //pub associated_token_program: Program<'info, associated_token::AssociatedToken>,
     pub system_program: Program<'info, System>,
     pub rent: Sysvar<'info, Rent>,
 }
@@ -814,13 +825,15 @@ pub struct VaultManager {
     pub draw_duration: u64, // in seconds, duration until next draw time
     pub ticket_price: u64,
     pub winning_numbers: [u8; 6],
-    pub locked: bool, // when draw is called, lock the program until Dispense is called
+    pub locked: bool, // when draw is called, lock the program until dispense is called
+    pub deposit_token_reserve: u64, // amount of tokens to keep in deposit_vault at all times
 }
 
 #[account]
 #[derive(Default)]
 pub struct Ticket {
-    pub mint: Pubkey,
+    pub deposit_mint: Pubkey,
+    pub yield_mint: Pubkey,
     pub vault: Pubkey,
     pub tickets: Pubkey,
     pub owner: Pubkey,
@@ -846,8 +859,30 @@ pub enum ErrorCode {
 
     #[msg("Not enough tokens for swap")]
     NotEnoughTokens,
+
+    #[msg("Invalid ticket price")]
+    InvalidTicketPrice,
+
+    #[msg("Invalid draw duration")]
+    InvalidDrawDuration,
 }
 
 fn get_current_time() -> u64 {
     return Clock::get().unwrap().unix_timestamp as u64;
+}
+
+// calculate prize to send to winner
+// this function is expected to be called after swapping all yield tokens back to deposit tokens
+fn calculate_prize(tickets_supply: u64, ticket_price: u64, deposit_vault_amount: u64) -> u64 {
+    // deposit_vault amount - (tickets_supply * ticket_price) = prize amount
+    let deposit_amount = tickets_supply * ticket_price;
+    let mut prize_amount = deposit_vault_amount - deposit_amount;
+
+    // not enough gains for a prize
+    // set amount to 0, so we can unlock the vault and continue the lottery
+    if prize_amount <= 0 {
+        prize_amount = 0;
+    }
+
+    return prize_amount;
 }

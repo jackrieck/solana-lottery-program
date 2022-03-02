@@ -21,8 +21,6 @@ const TOKEN_SWAP_ACCOUNT = "TOKEN_SWAP_ACCOUNT";
 const TOKEN_SWAP_ACCOUNT_AUTHORITY = "TOKEN_SWAP_ACCOUNT_AUTHORITY";
 const POOL_FEE = "POOL_FEE";
 
-const PRIZE_AMOUNT = 100;
-
 interface Config {
   keys: Map<String, anchor.web3.PublicKey>;
   mintAuthority: anchor.web3.Account;
@@ -235,11 +233,11 @@ describe("Redeem", () => {
     const [ticket, ticketBump] = await buy(program, numbers, config, null);
 
     // buy enough tickets so that stake will work
-    const ticketCount = 10;
-    await buyNTickets(program, config, 10);
+    const ticketCount = 20;
+    await buyNTickets(program, config, ticketCount);
 
     // balance is 0 after buying a ticket
-    // account for 10 tickets bought + single ticket bought
+    // account for 20 tickets purchased + single ticket bought
     const totalTicketsPurchased = userDepositAtaBalance - 1 - ticketCount;
     await assertBalance(
       program,
@@ -354,7 +352,12 @@ describe("Dispense", () => {
     const userDepositAtaBalance = 1;
     const yieldVaultInitBalance = 10;
 
-    const config = await initialize(program, drawDurationSeconds, userDepositAtaBalance, yieldVaultInitBalance);
+    const config = await initialize(
+      program,
+      drawDurationSeconds,
+      userDepositAtaBalance,
+      yieldVaultInitBalance
+    );
     await tokenSwapInit(program, config);
 
     // buy winning ticket
@@ -373,14 +376,14 @@ describe("Dispense", () => {
     await assertBalance(
       program,
       config.keys.get(DEPOSIT_VAULT),
-      userDepositAtaBalance, 
+      userDepositAtaBalance
     );
 
     // check user received prize amount - fees
     await assertBalance(
       program,
       config.keys.get(USER_DEPOSIT_ATA),
-      yieldVaultInitBalance - 3, // swap fees reduce amount returned as prize
+      yieldVaultInitBalance - 3 // swap fees reduce amount returned as prize
     );
   });
 
@@ -523,10 +526,12 @@ describe("Dispense", () => {
   it("Winning ticket chosen twice dispense prize twice", async () => {
     const drawDurationSeconds = 1;
     const userDepositAtaBalance = 10;
+    const yieldVaultInitBalance = 100;
     const config = await initialize(
       program,
       drawDurationSeconds,
-      userDepositAtaBalance
+      userDepositAtaBalance,
+      yieldVaultInitBalance
     );
     await tokenSwapInit(program, config);
 
@@ -546,10 +551,13 @@ describe("Dispense", () => {
 
     // assert winning user got the prize
     // subtract 1 for the ticket purchase
+    // subtract 3 for swap fees
+    const expectedUserDepositATABalance =
+      yieldVaultInitBalance + userDepositAtaBalance - 1 - 3;
     await assertBalance(
       program,
       config.keys.get(USER_DEPOSIT_ATA),
-      PRIZE_AMOUNT + userDepositAtaBalance - 1
+      expectedUserDepositATABalance
     );
 
     // wait for cutoff_time to expire again
@@ -561,11 +569,11 @@ describe("Dispense", () => {
     // at this point, there is no prize money left
     await dispense(program, config, numbers, null);
 
-    // balance should equal above because there is no prize left
+    // balance should remain the same because there is no prize left
     await assertBalance(
       program,
       config.keys.get(USER_DEPOSIT_ATA),
-      PRIZE_AMOUNT + userDepositAtaBalance - 1
+      expectedUserDepositATABalance
     );
   });
 });
@@ -574,17 +582,30 @@ describe("Stake", () => {
   anchor.setProvider(anchor.Provider.env());
   const program = anchor.workspace.NoLossLottery as Program<NoLossLottery>;
 
-  it("Stake successfully after 10 ticket purchases", async () => {
+  it("Stake successfully after 20 ticket purchases", async () => {
     const drawDurationSeconds = 1;
 
     const config = await initialize(program, drawDurationSeconds);
     await tokenSwapInit(program, config);
 
     // buy several tickets to add funds to deposit_vault
-    await buyNTickets(program, config, 10);
+    await buyNTickets(program, config, 20);
 
     // swap tokens to yield bearing tokens and put in yield vault
     await stake(program, config, null);
+  });
+
+  it("Stake unsuccessful, not enough tokens in reserve", async () => {
+    const drawDurationSeconds = 1;
+
+    const config = await initialize(program, drawDurationSeconds);
+    await tokenSwapInit(program, config);
+
+    // buy several tickets to add funds to deposit_vault
+    await buyNTickets(program, config, 2);
+
+    // swap tokens to yield bearing tokens and put in yield vault
+    await stake(program, config, program.idl.errors[5].code);
   });
 });
 
