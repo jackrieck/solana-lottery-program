@@ -33,7 +33,7 @@ describe("Buy", () => {
 
   const program = anchor.workspace.NoLossLottery as Program<NoLossLottery>;
 
-  it("Buy ticket", async () => {
+  it.only("Buy ticket", async () => {
     const drawDurationSeconds = 1;
 
     const config = await initialize(program, drawDurationSeconds);
@@ -705,7 +705,8 @@ async function initialize(
   // ticket price in tokens
   const ticketPrice = new anchor.BN(1);
 
-  console.log(switchboard.SBV2_DEVNET_PID.toString());
+  // init vrf
+  const vrfAccount = await switchboard.VrfAccount.create(switchboard.SBV2_DEVNET_PID);
 
   // init vault
   const initTxSig = await program.rpc.initialize(
@@ -719,9 +720,7 @@ async function initialize(
         yieldVault: yieldVault,
         vaultManager: vaultMgr,
         tickets: tickets,
-        vrfAccount: new anchor.web3.PublicKey(
-          "F8ce7MsckeZAbAGmxjJNetxYXQa9mKr9nnrC3qKubyYy"
-        ),
+        vrfAccount: vrfAccount.publicKey, 
         user: program.provider.wallet.publicKey,
         systemProgram: anchor.web3.SystemProgram.programId,
         tokenProgram: spl.TOKEN_PROGRAM_ID,

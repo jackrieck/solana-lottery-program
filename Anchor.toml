@@ -19,5 +19,13 @@ address = "SwaPpA9LAaLfeLi3a68M4DjnLqgtticKg6CnyNwgAC8"
 [[test.validator.clone]]
 address = "FV9WWFWYzWHDpAc8oxiFKV1LmFUyWw7HGdo4GK19MiZW"
 
+# vrf
+[[test.validator.clone]]
+address = "2TfB33aLaneQb5TNVwyDz3jSZXS6jdW2ARw1Dgf84XCG"
+
+# vrf data
+[[test.validator.clone]]
+address = "J4CArpsbrZqu1axqQ4AnrqREs3jwoyA1M5LMiQQmAzB9"
+
 [scripts]
 test = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 tests/**/*.ts"
