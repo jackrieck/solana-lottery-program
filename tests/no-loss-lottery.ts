@@ -2,6 +2,7 @@ import * as anchor from "@project-serum/anchor";
 import * as spl from "@solana/spl-token";
 import * as assert from "assert";
 import * as tokenSwap from "@solana/spl-token-swap";
+import * as switchboard from "@switchboard-xyz/switchboard-v2";
 import { Program } from "@project-serum/anchor";
 import { NoLossLottery } from "../target/types/no_loss_lottery";
 
@@ -704,6 +705,8 @@ async function initialize(
   // ticket price in tokens
   const ticketPrice = new anchor.BN(1);
 
+  console.log(switchboard.SBV2_DEVNET_PID.toString());
+
   // init vault
   const initTxSig = await program.rpc.initialize(
     new anchor.BN(drawDurationSeconds),
@@ -716,6 +719,9 @@ async function initialize(
         yieldVault: yieldVault,
         vaultManager: vaultMgr,
         tickets: tickets,
+        vrfAccount: new anchor.web3.PublicKey(
+          "F8ce7MsckeZAbAGmxjJNetxYXQa9mKr9nnrC3qKubyYy"
+        ),
         user: program.provider.wallet.publicKey,
         systemProgram: anchor.web3.SystemProgram.programId,
         tokenProgram: spl.TOKEN_PROGRAM_ID,

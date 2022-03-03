@@ -5,6 +5,7 @@ use anchor_spl::{
     token::{self},
 };
 use spl_token_swap::instruction::{swap, Swap};
+pub use switchboard_v2::VrfAccountData;
 
 declare_id!("Fg6PaFpoGXkYsidMpWTK6W2BeZ7FEfcYkg476zPFsLnS");
 
@@ -16,6 +17,9 @@ pub mod no_loss_lottery {
         draw_duration: u64,
         ticket_price: u64,
     ) -> Result<()> {
+        // validate switchboard vrf
+        let _vrf = VrfAccountData::new(&ctx.accounts.vrf_account)?;
+
         // ticket_price must be > 0
         if ticket_price <= 0 {
             return Err(error!(ErrorCode::InvalidTicketPrice));
@@ -526,6 +530,11 @@ pub struct Initialize<'info> {
         mint::decimals = 0,
     )]
     pub tickets: Account<'info, token::Mint>,
+
+    ///// CHECK: TODO
+    //pub vrf_state: AccountInfo<'info>,
+    /// CHECK: TODO
+    pub vrf_account: AccountInfo<'info>,
 
     #[account(mut)]
     pub user: Signer<'info>,

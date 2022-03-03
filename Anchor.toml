@@ -11,9 +11,11 @@ wallet = "~/.config/solana/id.json"
 [test.validator]
 url = "https://api.devnet.solana.com"
 
+# token-swap
 [[test.validator.clone]]
 address = "SwaPpA9LAaLfeLi3a68M4DjnLqgtticKg6CnyNwgAC8"
 
+# token-swap data
 [[test.validator.clone]]
 address = "FV9WWFWYzWHDpAc8oxiFKV1LmFUyWw7HGdo4GK19MiZW"
 
