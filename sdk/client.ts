@@ -35,7 +35,7 @@ function initAccounts(
   ammAuthority: anchor.web3.PublicKey,
   poolFee: anchor.web3.PublicKey
 ): Accounts {
-  return {
+  const accounts = {
     depositMint: depositMint,
     depositVault: depositVault,
     yieldMint: yieldMint,
@@ -50,6 +50,21 @@ function initAccounts(
     ammAuthority: ammAuthority,
     poolFee: poolFee,
   };
+
+  console.log("\ndepositMint: %s", depositMint);
+  console.log("depositVault: %s", depositVault);
+  console.log("yieldMint: %s", yieldMint);
+  console.log("yieldVault: %s", yieldVault);
+  console.log("tickets: %s", tickets);
+  console.log("vaultManager: %s", vaultManager);
+  console.log("userDepositAta: %s", userDepositAta);
+  console.log("swapDepositVault: %s", swapDepositVault);
+  console.log("swapYieldVault: %s", swapYieldVault);
+  console.log("poolMint: %s", poolMint);
+  console.log("amm: %s", amm);
+  console.log("ammAuthority: %s\n", ammAuthority);
+
+  return accounts
 }
 
 export class Client {
