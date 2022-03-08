@@ -34,16 +34,16 @@ No-loss lottery: Build a platform for users to deposit a variety of tokens into 
 ```bash
 # initialize writes pubkey's to `./clientaccounts.env
 # required for further commands
-ANCHOR_WALLET="/Users/jack/.config/solana/id.json" ANCHOR_PROVIDER_URL="http://localhost:8899" ts-node ./sdk/scripts/initialize.ts
+ANCHOR_WALLET="/Users/jack/.config/solana/id.json" ts-node ./sdk/scripts/initialize.ts
 
 # buy winning ticket
-ANCHOR_WALLET="/Users/jack/.config/solana/id.json" ANCHOR_PROVIDER_URL="http://localhost:8899" ts-node ./sdk/scripts/buy.ts
+ANCHOR_WALLET="/Users/jack/.config/solana/id.json" ts-node ./sdk/scripts/buy.ts
 
 # draw winning ticket numbers
-ANCHOR_WALLET="/Users/jack/.config/solana/id.json" ANCHOR_PROVIDER_URL="http://localhost:8899" ts-node ./sdk/scripts/draw.ts
+ANCHOR_WALLET="/Users/jack/.config/solana/id.json" ts-node ./sdk/scripts/draw.ts
 
 # dispense prize to winner
-ANCHOR_WALLET="/Users/jack/.config/solana/id.json" ANCHOR_PROVIDER_URL="http://localhost:8899" ts-node ./sdk/scripts/dispense.ts
+ANCHOR_WALLET="/Users/jack/.config/solana/id.json" ts-node ./sdk/scripts/dispense.ts
 ```
 
 ### TODO
