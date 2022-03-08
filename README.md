@@ -32,7 +32,8 @@ No-loss lottery: Build a platform for users to deposit a variety of tokens into 
 ## sdk usage
 
 ```bash
-# initialize writes pubkey's to `./clientaccounts.env
+# initialize writes pubkeys to 'clientaccounts.env'
+# other funcs read from 'clientaccounts.env'
 # required for further commands
 ANCHOR_WALLET="/Users/jack/.config/solana/id.json" ts-node ./sdk/scripts/initialize.ts
 
