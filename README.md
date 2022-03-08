@@ -29,6 +29,23 @@ No-loss lottery: Build a platform for users to deposit a variety of tokens into 
 - if not call `swap_tokens` to get enough liquidity and transfer `deposit` tokens back to user.
 - if `dispense` finds winner, calculate prize amount and call `swap_tokens` to swap all `yield` tokens for `deposit` tokens, calculate prize and send to winner.
 
+## sdk usage
+
+```bash
+# initialize writes pubkey's to `./clientaccounts.env
+# required for further commands
+ANCHOR_WALLET="/Users/jack/.config/solana/id.json" ANCHOR_PROVIDER_URL="http://localhost:8899" ts-node ./sdk/scripts/initialize.ts
+
+# buy winning ticket
+ANCHOR_WALLET="/Users/jack/.config/solana/id.json" ANCHOR_PROVIDER_URL="http://localhost:8899" ts-node ./sdk/scripts/buy.ts
+
+# draw winning ticket numbers
+ANCHOR_WALLET="/Users/jack/.config/solana/id.json" ANCHOR_PROVIDER_URL="http://localhost:8899" ts-node ./sdk/scripts/draw.ts
+
+# dispense prize to winner
+ANCHOR_WALLET="/Users/jack/.config/solana/id.json" ANCHOR_PROVIDER_URL="http://localhost:8899" ts-node ./sdk/scripts/dispense.ts
+```
+
 ### TODO
 
 - VRF to pick a random winning ticket

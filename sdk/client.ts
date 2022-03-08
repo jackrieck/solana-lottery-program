@@ -30,7 +30,8 @@ export class Client {
   private program: Program<NoLossLottery>;
 
   constructor() {
-    this.program = anchor.workspace.NoLossLottery as Program<NoLossLottery>;
+    const program = anchor.workspace.NoLossLottery as Program<NoLossLottery>;
+    this.program = program;
   }
 
   // initialize lottery
