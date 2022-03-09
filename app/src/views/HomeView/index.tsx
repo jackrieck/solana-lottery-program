@@ -1,5 +1,6 @@
 import { FC, useState, useRef } from "react";
 import * as spl from "@solana/spl-token";
+import * as tokenSwap from "@solana/spl-token-swap";
 import { Program } from "@project-serum/anchor";
 import { AnchorWallet, useAnchorWallet } from "@solana/wallet-adapter-react";
 import { useConnection } from '@solana/wallet-adapter-react';
@@ -35,47 +36,57 @@ export default function useProgram(connection: anchor.web3.Connection, wallet: A
   return new anchor.Program(IDL, programId, provider);
 }
 
-const VAULT = "VAULT";
+const DEPOSIT_MINT = "DEPOSIT_MINT";
+const YIELD_MINT = "YIELD_MINT";
+const DEPOSIT_VAULT = "DEPOSIT_VAULT";
+const YIELD_VAULT = "YIELD_VAULT";
 const VAULT_MANAGER = "VAULT_MANAGER";
-const MINT = "MINT";
 const TICKETS = "TICKETS";
-const PRIZE = "PRIZE";
 const USER_DEPOSIT_ATA = "USER_DEPOSIT_ATA";
 const USER_TICKET_ATA = "USER_TICKET_ATA";
+const SWAP_YIELD_VAULT = "SWAP_YIELD_VAULT";
+const SWAP_DEPOSIT_VAULT = "SWAP_DEPOSIT_VAULT";
+const POOL_MINT = "POOL_MINT";
+const TOKEN_SWAP_ACCOUNT = "TOKEN_SWAP_ACCOUNT";
+const TOKEN_SWAP_ACCOUNT_AUTHORITY = "TOKEN_SWAP_ACCOUNT_AUTHORITY";
+const POOL_FEE = "POOL_FEE";
 
-const mint = "7Bwd6FV3SwewtgjkQuw6BrSRWBg4Sm1oq33JuwmxkyvD";
+const depositMint = "AUjY2fwuC85NjwF5gK3kJF2JNDjMM835bBsMcwvcktLD";
+const yieldMint = "GQvwSBLcKm27ud5Lwe1pA1d3oQdPPmQ3AazMXo6cre4A";
+const swapDepositVault = new anchor.web3.PublicKey("DGNFck1MMWwampNN9cRcorCQDVmiGkjaeyMCAACo23jL");
+const swapYieldVault = new anchor.web3.PublicKey("2xLgmdNVwkB51o9sMVujgxoKACnjVsj7pxFD7ncG7y1W");
+const poolMint = new anchor.web3.PublicKey("BQnR8yQUq2WVLybCsFUvwpodig3xp69wWbDjG2DyDx7b");
+const tokenSwapAccount = new anchor.web3.PublicKey("2FQ5MxNAP6AMEFj434uL2CZAgquG4d85uotRY58MABYN");
+const tokenSwapAuthority = new anchor.web3.PublicKey("AhCwD3a9KvoZwYukDnVxcx9AjMk68vzv1QxFfvUSd6oG");
+const poolFee = new anchor.web3.PublicKey("E9UgGsffnTRxvv4hee7B3JoNinuPZnsYnAZDZnHRWhYE");
 
 async function deriveConfig(
   program: anchor.Program<NoLossLottery>,
-  mint: anchor.web3.PublicKey): Promise<Config> {
+  depositMint: anchor.web3.PublicKey,
+  yieldMint: anchor.web3.PublicKey): Promise<Config> {
 
-  const [vault, vaultBump] = await anchor.web3.PublicKey.findProgramAddress(
-    [mint.toBuffer()],
+  const [depositVault, _depositVaultBump] = await anchor.web3.PublicKey.findProgramAddress(
+    [depositMint.toBuffer()],
     program.programId
   );
   
-  const [vaultMgr, vaultMgrBump] = await anchor.web3.PublicKey.findProgramAddress(
-      [mint.toBuffer(), vault.toBuffer()],
+  const [yieldVault, _yieldVaultBump] = await anchor.web3.PublicKey.findProgramAddress(
+    [yieldMint.toBuffer()],
+    program.programId
+  );
+  
+  const [vaultMgr, _vaultMgrBump] = await anchor.web3.PublicKey.findProgramAddress(
+      [depositMint.toBuffer(), yieldMint.toBuffer(), depositVault.toBuffer(), yieldVault.toBuffer()],
       program.programId
     );
 
-  const [tickets, ticketsBump] = await anchor.web3.PublicKey.findProgramAddress(
-    [mint.toBuffer(), vault.toBuffer(), vaultMgr.toBuffer()],
-    program.programId
-  );
-
-  const [prize, prizeBump] = await anchor.web3.PublicKey.findProgramAddress(
-    [
-      mint.toBuffer(),
-      vault.toBuffer(),
-      vaultMgr.toBuffer(),
-      tickets.toBuffer(),
-    ],
+  const [tickets, _ticketsBump] = await anchor.web3.PublicKey.findProgramAddress(
+    [depositMint.toBuffer(), yieldMint.toBuffer(), depositVault.toBuffer(), yieldVault.toBuffer(), vaultMgr.toBuffer()],
     program.programId
   );
 
   const userDepositAta = await spl.getAssociatedTokenAddress(
-    mint,
+    depositMint,
     program.provider.wallet.publicKey
   );
 
@@ -85,19 +96,29 @@ async function deriveConfig(
   );
 
   let keys = new Map<String, anchor.web3.PublicKey>();
-  keys.set(VAULT, vault);
+  keys.set(DEPOSIT_MINT, depositMint);
+  keys.set(DEPOSIT_VAULT, depositVault);
+  keys.set(YIELD_MINT, yieldMint);
+  keys.set(YIELD_VAULT, yieldVault);
   keys.set(VAULT_MANAGER, vaultMgr);
-  keys.set(MINT, mint);
   keys.set(TICKETS, tickets);
-  keys.set(PRIZE, prize);
   keys.set(USER_TICKET_ATA, userTicketsAta);
   keys.set(USER_DEPOSIT_ATA, userDepositAta);
 
-  console.log('mint: %s', mint.toString());
-  console.log('vault: %s', vault.toString());
+  // token swap keys
+  keys.set(SWAP_YIELD_VAULT, swapYieldVault)
+  keys.set(SWAP_DEPOSIT_VAULT, swapDepositVault);
+  keys.set(POOL_MINT, poolMint);
+  keys.set(TOKEN_SWAP_ACCOUNT, tokenSwapAccount);
+  keys.set(TOKEN_SWAP_ACCOUNT_AUTHORITY, tokenSwapAuthority);
+  keys.set(POOL_FEE, poolFee);
+
+  console.log('depositMint: %s', depositMint.toString());
+  console.log('yieldMint: %s', yieldMint.toString());
+  console.log('depositVault: %s', depositVault.toString());
+  console.log('yieldVault: %s', yieldVault.toString());
   console.log('vaultManager: %s', vaultMgr.toString());
   console.log('tickets: %s', tickets.toString());
-  console.log('prize: %s', prize.toString());
   console.log('userTicketsAta: %s', userTicketsAta.toString());
   console.log('userDepositAta: %s', userDepositAta.toString());
 
@@ -139,8 +160,10 @@ async function buy(
     // buy a ticket
     const buyTxSig = await program.rpc.buy(numbers, {
       accounts: {
-        mint: config.keys.get(MINT)!,
-        vault: config.keys.get(VAULT)!,
+        depositMint: config.keys.get(DEPOSIT_MINT)!,
+        yieldMint: config.keys.get(YIELD_MINT)!,
+        depositVault: config.keys.get(DEPOSIT_VAULT)!,
+        yieldVault: config.keys.get(YIELD_VAULT)!,
         vaultManager: config.keys.get(VAULT_MANAGER)!,
         tickets: config.keys.get(TICKETS)!,
         ticket: ticket,
@@ -169,15 +192,23 @@ async function redeem(
     // user redeem token
     const redeemTxSig = await program.rpc.redeem({
       accounts: {
-        mint: config.keys.get(MINT)!,
-        vault: config.keys.get(VAULT)!,
+        depositMint: config.keys.get(DEPOSIT_MINT)!,
+        yieldMint: config.keys.get(YIELD_MINT)!,
+        depositVault: config.keys.get(DEPOSIT_VAULT)!,
+        yieldVault: config.keys.get(YIELD_VAULT)!,
         tickets: config.keys.get(TICKETS)!,
         vaultManager: config.keys.get(VAULT_MANAGER)!,
         ticket: ticket,
-        prize: config.keys.get(PRIZE)!,
+        swapYieldVault: config.keys.get(SWAP_YIELD_VAULT)!,
+        swapDepositVault: config.keys.get(SWAP_DEPOSIT_VAULT)!,
+        poolMint: config.keys.get(POOL_MINT)!,
+        amm: config.keys.get(TOKEN_SWAP_ACCOUNT)!,
+        ammAuthority: config.keys.get(TOKEN_SWAP_ACCOUNT_AUTHORITY)!,
+        poolFee: config.keys.get(POOL_FEE)!,
         userTicketsAta: config.keys.get(USER_TICKET_ATA)!,
         user: program.provider.wallet.publicKey,
         userDepositAta: config.keys.get(USER_DEPOSIT_ATA)!,
+        tokenSwapProgram: tokenSwap.TOKEN_SWAP_PROGRAM_ID,
         systemProgram: anchor.web3.SystemProgram.programId,
         tokenProgram: spl.TOKEN_PROGRAM_ID,
         rent: anchor.web3.SYSVAR_RENT_PUBKEY,
@@ -207,8 +238,9 @@ export const HomeView: FC = ({}) => {
       console.log("program: %s", program.programId.toString())
       console.log("buy");
 
-      const mintPK = new anchor.web3.PublicKey(mint); 
-      const config = await deriveConfig(program, mintPK);
+      const depositMintPK= new anchor.web3.PublicKey(depositMint); 
+      const yieldMintPK = new anchor.web3.PublicKey(yieldMint); 
+      const config = await deriveConfig(program, depositMintPK, yieldMintPK);
 
       const numbers = [
         parseInt(oneRef.current!.value),
@@ -278,9 +310,10 @@ export const HomeView: FC = ({}) => {
       const program = useProgram(connection, wallet);
       console.log("redeem %s", addr);
 
-      const mintPK = new anchor.web3.PublicKey(mint); 
+      const depositMintPK = new anchor.web3.PublicKey(depositMint); 
+      const yieldMintPK = new anchor.web3.PublicKey(yieldMint); 
       const ticketPK = new anchor.web3.PublicKey(addr); 
-      const config = await deriveConfig(program, mintPK);
+      const config = await deriveConfig(program, depositMintPK, yieldMintPK);
       await redeem(program, config, ticketPK);
 
       viewTickets();
