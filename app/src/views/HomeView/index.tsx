@@ -271,13 +271,13 @@ export const HomeView: FC = ({}) => {
       // Get accounts associated with the connected wallet
       const walletMemcmp: MemcmpFilter = {
         memcmp: {
-          offset: 104,
+          offset: 136,
           bytes: wallet.publicKey.toBase58(),
         }
       };
       // Get ticket PDAs by matching with the account size
       const sizeFilter: DataSizeFilter = {
-        dataSize: 142,
+        dataSize: 174,
       }
       const filters = [walletMemcmp, sizeFilter];
       const config: GetProgramAccountsConfig = { filters: filters };
