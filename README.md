@@ -32,19 +32,23 @@ No-loss lottery: Build a platform for users to deposit a variety of tokens into 
 ## sdk usage
 
 ```bash
+# define wallet to use for transactions
+# copy path from 'Keypair Path'
+export ANCHOR_WALLET=$(solana config get | grep 'Keypair Path' | cut -d ' ' -f3)
+
 # initialize writes pubkeys to 'clientaccounts.env'
 # other funcs read from 'clientaccounts.env'
 # required for further commands
-ANCHOR_WALLET="/Users/jack/.config/solana/id.json" ts-node ./sdk/scripts/initialize.ts
+ts-node ./sdk/scripts/initialize.ts
 
-# buy winning ticket
-ANCHOR_WALLET="/Users/jack/.config/solana/id.json" ts-node ./sdk/scripts/buy.ts
+# buy a ticket
+ts-node ./sdk/scripts/buy.ts
 
 # draw winning ticket numbers
-ANCHOR_WALLET="/Users/jack/.config/solana/id.json" ts-node ./sdk/scripts/draw.ts
+ts-node ./sdk/scripts/draw.ts
 
 # dispense prize to winner
-ANCHOR_WALLET="/Users/jack/.config/solana/id.json" ts-node ./sdk/scripts/dispense.ts
+ts-node ./sdk/scripts/dispense.ts
 ```
 
 ### TODO
