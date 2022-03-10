@@ -27,6 +27,8 @@ cp clientaccounts.env ./app/.env.local
 # run app in a new terminal
 cd app/ && yarn run dev
 
+# navigate to webapp with a browser at http://localhost:3000
+
 # connect to webapp with Phantom and airdrop some SOL for transaction fees
 solana airdrop 3 $PHANTOM_WALLET
 
