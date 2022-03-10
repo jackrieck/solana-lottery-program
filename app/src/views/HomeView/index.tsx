@@ -113,15 +113,6 @@ async function deriveConfig(
   keys.set(TOKEN_SWAP_ACCOUNT_AUTHORITY, tokenSwapAuthority);
   keys.set(POOL_FEE, poolFee);
 
-  console.log('depositMint: %s', depositMint.toString());
-  console.log('yieldMint: %s', yieldMint.toString());
-  console.log('depositVault: %s', depositVault.toString());
-  console.log('yieldVault: %s', yieldVault.toString());
-  console.log('vaultManager: %s', vaultMgr.toString());
-  console.log('tickets: %s', tickets.toString());
-  console.log('userTicketsAta: %s', userTicketsAta.toString());
-  console.log('userDepositAta: %s', userDepositAta.toString());
-
   console.log(keys);
 
   return {
