@@ -21,9 +21,6 @@ export ANCHOR_WALLET=$(solana config get | grep 'Keypair Path' | cut -d ' ' -f3)
 # required for further commands
 ts-node ./sdk/scripts/initialize.ts
 
-# copy keys to app directory
-cp clientaccounts.env ./app/.env.local
-
 # run app in a new terminal
 cd app/ && yarn run dev
 
