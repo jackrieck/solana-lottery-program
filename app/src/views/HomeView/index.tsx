@@ -51,14 +51,14 @@ const TOKEN_SWAP_ACCOUNT = "TOKEN_SWAP_ACCOUNT";
 const TOKEN_SWAP_ACCOUNT_AUTHORITY = "TOKEN_SWAP_ACCOUNT_AUTHORITY";
 const POOL_FEE = "POOL_FEE";
 
-const depositMint = process.env.depositMint!;
-const yieldMint = process.env.yieldMint!;
-const swapDepositVault = new anchor.web3.PublicKey(process.env.swapDepositVault!);
-const swapYieldVault = new anchor.web3.PublicKey(process.env.swapYieldVault!);
-const poolMint = new anchor.web3.PublicKey(process.env.poolMint!);
-const tokenSwapAccount = new anchor.web3.PublicKey(process.env.amm!);
-const tokenSwapAuthority = new anchor.web3.PublicKey(process.env.ammAuthority!);
-const poolFee = new anchor.web3.PublicKey(process.env.poolFee!);
+const depositMint = process.env.NEXT_PUBLIC_depositMint!;
+const yieldMint = process.env.NEXT_PUBLIC_yieldMint!;
+const swapDepositVault = new anchor.web3.PublicKey(process.env.NEXT_PUBLIC_swapDepositVault!);
+const swapYieldVault = new anchor.web3.PublicKey(process.env.NEXT_PUBLIC_swapYieldVault!);
+const poolMint = new anchor.web3.PublicKey(process.env.NEXT_PUBLIC_poolMint!);
+const tokenSwapAccount = new anchor.web3.PublicKey(process.env.NEXT_PUBLIC_amm!);
+const tokenSwapAuthority = new anchor.web3.PublicKey(process.env.NEXT_PUBLIC_ammAuthority!);
+const poolFee = new anchor.web3.PublicKey(process.env.NEXT_PUBLIC_poolFee!);
 
 async function deriveConfig(
   program: anchor.Program<NoLossLottery>,
