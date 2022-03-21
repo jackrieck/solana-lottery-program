@@ -79,7 +79,7 @@ export class Client {
       accounts.depositVault,
       accounts.mintAuthority.publicKey,
       1000
-    )
+    );
   }
 
   // buy lottery ticket
