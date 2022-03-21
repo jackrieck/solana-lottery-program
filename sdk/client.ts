@@ -6,13 +6,17 @@ import { NoLossLottery } from "../target/types/no_loss_lottery";
 import * as dotenv from "dotenv";
 import * as envfile from "envfile";
 import * as fs from "fs";
+import {
+  MetadataProgram,
+  Metadata,
+  Edition,
+} from "@metaplex-foundation/mpl-token-metadata";
 
 interface ClientAccounts {
   depositMint: anchor.web3.PublicKey;
   depositVault: anchor.web3.PublicKey;
   yieldMint: anchor.web3.PublicKey;
   yieldVault: anchor.web3.PublicKey;
-  tickets: anchor.web3.PublicKey;
   vaultManager: anchor.web3.PublicKey;
   userDepositAta: anchor.web3.PublicKey;
   swapDepositVault: anchor.web3.PublicKey;
@@ -21,6 +25,10 @@ interface ClientAccounts {
   amm: anchor.web3.PublicKey;
   ammAuthority: anchor.web3.PublicKey;
   poolFee: anchor.web3.PublicKey;
+  collectionMint: anchor.web3.PublicKey;
+  collectionMetadata: anchor.web3.PublicKey;
+  collectionMasterEdition: anchor.web3.PublicKey;
+  collectionAta: anchor.web3.PublicKey;
   mintAuthority: anchor.web3.Account;
 }
 
@@ -37,6 +45,7 @@ export class Client {
 
   // initialize lottery
   public async initialize(
+    lotteryName: string,
     drawDurationSeconds: number,
     ticketPrice: number,
     userDepositAta: string
@@ -48,6 +57,7 @@ export class Client {
 
     // init lottery
     await this.program.rpc.initialize(
+      lotteryName,
       new anchor.BN(drawDurationSeconds),
       new anchor.BN(ticketPrice),
       {
@@ -57,8 +67,12 @@ export class Client {
           yieldMint: accounts.yieldMint,
           yieldVault: accounts.yieldVault,
           vaultManager: accounts.vaultManager,
-          tickets: accounts.tickets,
+          collectionMint: accounts.collectionMint,
+          collectionMetadata: accounts.collectionMetadata,
+          collectionMasterEdition: accounts.collectionMasterEdition,
+          collectionAta: accounts.collectionAta,
           user: this.program.provider.wallet.publicKey,
+          metadataProgram: MetadataProgram.PUBKEY,
           systemProgram: anchor.web3.SystemProgram.programId,
           tokenProgram: spl.TOKEN_PROGRAM_ID,
           rent: anchor.web3.SYSVAR_RENT_PUBKEY,
@@ -73,18 +87,12 @@ export class Client {
       accounts.depositVault,
       accounts.mintAuthority.publicKey,
       1000
-    )
+    );
   }
 
   // buy lottery ticket
   public async buy(count: number) {
     const accounts = await this.readClientAccounts();
-
-    // get tickets ATA for user
-    const userTicketsAta = await spl.getAssociatedTokenAddress(
-      accounts.tickets,
-      this.program.provider.wallet.publicKey
-    );
 
     for (let i = 1; i <= count; i++) {
       let numbers: Array<number> = [i, 12, 2, 3, 4, 5];
@@ -96,6 +104,22 @@ export class Client {
           this.program.programId
         );
 
+      const ticketMint = await spl.createMint(
+        this.program.provider.connection,
+        accounts.mintAuthority,
+        accounts.vaultManager,
+        accounts.vaultManager,
+        0
+      );
+
+      const userTicketAta = await spl.getAssociatedTokenAddress(
+        ticketMint,
+        this.program.provider.wallet.publicKey
+      );
+
+      const ticketMetadata = await Metadata.getPDA(ticketMint);
+      const ticketMasterEdition = await Edition.getPDA(ticketMint);
+
       await this.program.rpc.buy(numbers, {
         accounts: {
           depositMint: accounts.depositMint,
@@ -103,13 +127,19 @@ export class Client {
           yieldMint: accounts.yieldMint,
           yieldVault: accounts.yieldVault,
           vaultManager: accounts.vaultManager,
-          tickets: accounts.tickets,
+          collectionMint: accounts.collectionMint,
+          collectionMetadata: accounts.collectionMetadata,
+          collectionMasterEdition: accounts.collectionMasterEdition,
+          ticketMint: ticketMint,
+          ticketMetadata: ticketMetadata,
+          ticketMasterEdition: ticketMasterEdition,
           ticket: ticket,
-          userTicketsAta: userTicketsAta,
+          userTicketAta: userTicketAta,
           user: this.program.provider.wallet.publicKey,
           userDepositAta: accounts.userDepositAta,
           systemProgram: anchor.web3.SystemProgram.programId,
           associatedTokenProgram: spl.ASSOCIATED_TOKEN_PROGRAM_ID,
+          metadataProgram: MetadataProgram.PUBKEY,
           tokenProgram: spl.TOKEN_PROGRAM_ID,
           rent: anchor.web3.SYSVAR_RENT_PUBKEY,
         },
@@ -128,7 +158,6 @@ export class Client {
         depositVault: accounts.depositVault,
         yieldMint: accounts.yieldMint,
         yieldVault: accounts.yieldVault,
-        tickets: accounts.tickets,
         vaultManager: accounts.vaultManager,
         user: this.program.provider.wallet.publicKey,
         systemProgram: anchor.web3.SystemProgram.programId,
@@ -168,28 +197,93 @@ export class Client {
   public async dispense() {
     const accounts = await this.readClientAccounts();
 
-    // fetch winning numbers
-    const vaultMgrAccount = await this.program.account.vaultManager.fetch(
+    // create payer
+    const payer = await newAccountWithLamports(this.program.provider.connection);
+
+    // fetch vault manager data
+    const vaultManagerAccount = await this.program.account.vaultManager.fetch(
       accounts.vaultManager
     );
 
-    // create winning ticket PDA
-    const [ticket, ticketBump] = await anchor.web3.PublicKey.findProgramAddress(
-      [
-        Uint8Array.from(vaultMgrAccount.winningNumbers),
-        accounts.vaultManager.toBuffer(),
-      ],
-      this.program.programId
+    // find winning ticket PDA
+    const [ticket, _ticketBump] =
+      await anchor.web3.PublicKey.findProgramAddress(
+        [
+          Uint8Array.from(vaultManagerAccount.winningNumbers),
+          accounts.vaultManager.toBuffer(),
+        ],
+        this.program.programId
+      );
+
+    // get owner of ticket nft
+
+    // set owner to user wallet as default
+    // if a winning ticket exists this will be overwritten with the ticket owner's pubkey
+    let winningTicketOwner = new anchor.web3.PublicKey(
+      this.program.provider.wallet.publicKey
+    );
+
+    let ticketMint = await spl.createMint(
+      this.program.provider.connection,
+      payer,
+      accounts.vaultManager,
+      accounts.vaultManager,
+      0
+    );
+
+    let depositMint = await spl.createMint(
+      this.program.provider.connection,
+      payer,
+      accounts.vaultManager,
+      accounts.vaultManager,
+      0
+    );
+
+    try {
+      const ticketAccount = await this.program.account.ticket.fetch(ticket);
+      // get largest token account holders of nft, there should only be 1 with an amount of 1
+      const largestAccounts =
+        await this.program.provider.connection.getTokenLargestAccounts(
+          ticketAccount.ticketMint
+        );
+      // get parsed data of the largest account
+      const largestAccountInfo =
+        await this.program.provider.connection.getParsedAccountInfo(
+          largestAccounts.value[0].address
+        );
+      winningTicketOwner = new anchor.web3.PublicKey(
+        (
+          largestAccountInfo.value?.data as anchor.web3.ParsedAccountData
+        ).parsed.info.owner
+      );
+
+      ticketMint = ticketAccount.ticketMint;
+      depositMint = ticketAccount.depositMint;
+    } catch (e) {
+      console.log(e);
+    }
+
+    const winnerTicketAta = await spl.getOrCreateAssociatedTokenAccount(
+      this.program.provider.connection,
+      payer,
+      ticketMint,
+      winningTicketOwner
+    );
+
+    const winnerDepositAta = await spl.getOrCreateAssociatedTokenAccount(
+      this.program.provider.connection,
+      payer,
+      depositMint,
+      winningTicketOwner
     );
 
     // dispense prize to winner
-    return this.program.rpc.dispense(vaultMgrAccount.winningNumbers, {
+    return this.program.rpc.dispense(vaultManagerAccount.winningNumbers, {
       accounts: {
         depositMint: accounts.depositMint,
         depositVault: accounts.depositVault,
         yieldMint: accounts.yieldMint,
         yieldVault: accounts.yieldVault,
-        tickets: accounts.tickets,
         vaultManager: accounts.vaultManager,
         ticket: ticket,
         swapYieldVault: accounts.swapYieldVault,
@@ -198,11 +292,15 @@ export class Client {
         amm: accounts.amm,
         ammAuthority: accounts.ammAuthority,
         poolFee: accounts.poolFee,
+        collectionMint: accounts.collectionMint,
         user: this.program.provider.wallet.publicKey,
-        userDepositAta: accounts.userDepositAta,
+        winnerDepositAta: winnerDepositAta.address,
+        winnerTicketAta: winnerTicketAta.address,
         tokenSwapProgram: tokenSwap.TOKEN_SWAP_PROGRAM_ID,
+        associatedTokenProgram: spl.ASSOCIATED_TOKEN_PROGRAM_ID,
         systemProgram: anchor.web3.SystemProgram.programId,
         tokenProgram: spl.TOKEN_PROGRAM_ID,
+        rent: anchor.web3.SYSVAR_RENT_PUBKEY,
       },
     });
   }
@@ -258,7 +356,7 @@ export class Client {
         this.program.programId
       );
 
-    const [tickets, _ticketsBump] =
+    const [collectionMint, _collectionMintBump] =
       await anchor.web3.PublicKey.findProgramAddress(
         [
           depositMint.toBuffer(),
@@ -269,6 +367,16 @@ export class Client {
         ],
         this.program.programId
       );
+
+    const collectionMetadata = await Metadata.getPDA(collectionMint);
+    const collectionMasterEdition = await Edition.getPDA(collectionMint);
+
+    const [collectionAta, _collectionAtaBump] =
+      await anchor.web3.PublicKey.findProgramAddress(
+        [collectionMint.toBuffer()],
+        this.program.programId
+      );
+    console.log("collection accounts created");
 
     // get deployer
     const userDeployerAta = await spl.getOrCreateAssociatedTokenAccount(
@@ -415,11 +523,14 @@ export class Client {
       depositVault: depositVault,
       yieldMint: yieldMint,
       yieldVault: yieldVault,
-      tickets: tickets,
       vaultManager: vaultMgr,
       userDepositAta: userDeployerAta.address,
       swapDepositVault: swapDepositVault.address,
       swapYieldVault: swapYieldVault.address,
+      collectionMint: collectionMint,
+      collectionMetadata: collectionMetadata,
+      collectionMasterEdition: collectionMasterEdition,
+      collectionAta: collectionAta,
       poolMint: tokenPoolMint,
       amm: tokenSwapAccount.publicKey,
       ammAuthority: tokenSwapAccountAuthority,
@@ -437,7 +548,6 @@ export class Client {
       NEXT_PUBLIC_depositVault: depositVault,
       NEXT_PUBLIC_yieldMint: yieldMint,
       NEXT_PUBLIC_yieldVault: yieldVault,
-      NEXT_PUBLIC_tickets: tickets,
       NEXT_PUBLIC_vaultManager: vaultMgr,
       NEXT_PUBLIC_userDepositAta: userDeployerAta.address,
       NEXT_PUBLIC_swapDepositVault: swapDepositVault.address,
@@ -446,6 +556,10 @@ export class Client {
       NEXT_PUBLIC_amm: tokenSwapAccount.publicKey,
       NEXT_PUBLIC_ammAuthority: tokenSwapAccountAuthority,
       NEXT_PUBLIC_poolFee: feeAccount.address,
+      NEXT_PUBLIC_collectionMint: collectionMint,
+      NEXT_PUBLIC_collectionMetadata: collectionMetadata,
+      NEXT_PUBLIC_collectionMasterEdition: collectionMasterEdition,
+      NEXT_PUBLIC_collectionAta: collectionAta,
     };
 
     const browserEnvFile = await envfile.stringify(browserAccounts);
@@ -463,7 +577,6 @@ export class Client {
       depositVault: new anchor.web3.PublicKey(process.env.depositVault),
       yieldMint: new anchor.web3.PublicKey(process.env.yieldMint),
       yieldVault: new anchor.web3.PublicKey(process.env.yieldVault),
-      tickets: new anchor.web3.PublicKey(process.env.tickets),
       vaultManager: new anchor.web3.PublicKey(process.env.vaultManager),
       userDepositAta: new anchor.web3.PublicKey(process.env.userDepositAta),
       swapDepositVault: new anchor.web3.PublicKey(process.env.swapDepositVault),
@@ -472,7 +585,15 @@ export class Client {
       amm: new anchor.web3.PublicKey(process.env.amm),
       ammAuthority: new anchor.web3.PublicKey(process.env.ammAuthority),
       poolFee: new anchor.web3.PublicKey(process.env.poolFee),
-      mintAuthority: new anchor.web3.Account,
+      collectionMint: new anchor.web3.PublicKey(process.env.collectionMint),
+      collectionMetadata: new anchor.web3.PublicKey(
+        process.env.collectionMetadata
+      ),
+      collectionMasterEdition: new anchor.web3.PublicKey(
+        process.env.collectionMasterEdition
+      ),
+      collectionAta: new anchor.web3.PublicKey(process.env.collectionAta),
+      mintAuthority: new anchor.web3.Account(),
     };
 
     return accounts;
