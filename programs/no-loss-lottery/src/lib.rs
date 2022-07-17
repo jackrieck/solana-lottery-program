@@ -483,7 +483,7 @@ pub mod no_loss_lottery {
         // burn the ticket from the user ATA
         let burn_accounts = token::Burn {
             mint: ctx.accounts.ticket_mint.clone().to_account_info(),
-            to: ctx.accounts.user_ticket_ata.clone().to_account_info(),
+            from: ctx.accounts.user_ticket_ata.clone().to_account_info(),
             authority: ctx.accounts.user.clone().to_account_info(),
         };
 
@@ -783,6 +783,11 @@ pub struct VrfClient {
     pub result: u128,
     pub last_timestamp: i64,
 }
+
+impl VrfClient {
+    pub const MAX_SIZE: usize = 8 + 32 + 8 + 32 + 32 + 16 + 8;
+}
+
 impl Default for VrfClient {
     fn default() -> Self {
         unsafe { std::mem::zeroed() }
@@ -813,6 +818,7 @@ pub struct Initialize<'info> {
 
     #[account(init,
         payer = user,
+        space = VaultManager::MAX_SIZE,
         seeds = [deposit_mint.key().as_ref(), yield_mint.key().as_ref(), deposit_vault.key().as_ref(), yield_vault.key().as_ref()],
         bump)]
     pub vault_manager: Account<'info, VaultManager>,
@@ -897,6 +903,7 @@ pub struct Buy<'info> {
     pub ticket_master_edition: AccountInfo<'info>,
 
     #[account(init,
+        space = Ticket::MAX_SIZE,
         payer = user,
         seeds = [&numbers, vault_manager.key().as_ref()],
         bump,
@@ -1055,6 +1062,7 @@ pub struct Dispense<'info> {
     pub collection_mint: Box<Account<'info, token::Mint>>,
 
     #[account(init_if_needed,
+        space = Ticket::MAX_SIZE,
         payer = user,
         seeds = [&numbers, vault_manager.key().as_ref()], bump)]
     pub ticket: Box<Account<'info, Ticket>>,
@@ -1172,6 +1180,10 @@ pub struct VaultManager {
     pub deposit_token_reserve: u64, // amount of tokens to keep in deposit_vault at all times
 }
 
+impl VaultManager {
+    pub const MAX_SIZE: usize = 8 + 50 + 32 + 32 + 32 + 32 + 32 + 8 + 8 + 8 + 8 + 6 + 6 + 1 + 8;
+}
+
 #[account]
 #[derive(Default)]
 pub struct Ticket {
@@ -1179,6 +1191,10 @@ pub struct Ticket {
     pub yield_mint: Pubkey,
     pub ticket_mint: Pubkey,
     pub numbers: [u8; 6],
+}
+
+impl Ticket {
+    pub const MAX_SIZE: usize = 8 + 32 + 32 + 32 + 6;
 }
 
 #[error_code]

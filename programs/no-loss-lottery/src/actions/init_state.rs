@@ -9,6 +9,7 @@ const MAX_RESULT: u64 = u64::MAX;
 pub struct InitState<'info> {
     #[account(
         init,
+        space = VrfClient::MAX_SIZE,
         seeds = [
             STATE_SEED, 
             vrf.key().as_ref(),
@@ -47,6 +48,7 @@ pub struct InitState<'info> {
     pub yield_vault: Box<Account<'info, token::TokenAccount>>,
 
     #[account(init,
+        space = VaultManager::MAX_SIZE,
         payer = user,
         seeds = [deposit_mint.key().as_ref(), yield_mint.key().as_ref(), deposit_vault.key().as_ref(), yield_vault.key().as_ref()],
         bump)]

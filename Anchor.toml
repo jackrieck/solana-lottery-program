@@ -1,5 +1,5 @@
 [programs.localnet]
-no_loss_lottery = "Fg6PaFpoGXkYsidMpWTK6W2BeZ7FEfcYkg476zPFsLnS"
+no_loss_lottery = "6aokcsMZ38t6FHLaiyFGdJPceVeqh6FE7Dkc8UWFDQam"
 
 [programs.devnet]
 no_loss_lottery = "6aokcsMZ38t6FHLaiyFGdJPceVeqh6FE7Dkc8UWFDQam"
@@ -7,12 +7,16 @@ no_loss_lottery = "6aokcsMZ38t6FHLaiyFGdJPceVeqh6FE7Dkc8UWFDQam"
 [registry]
 url = "https://anchor.projectserum.com"
 
+#[provider]
+#cluster = "devnet"
+#wallet = "wallet.json"
+
 [provider]
-cluster = "devnet"
-wallet = "wallet.json"
+cluster = "localnet"
+wallet = "/Users/jack/.config/solana/id.json"
 
 [test.validator]
-url = "https://api.google.devnet.solana.com"
+url = "https://api.devnet.solana.com"
 
 # token-swap
 [[test.validator.clone]]

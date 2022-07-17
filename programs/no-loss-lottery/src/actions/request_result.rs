@@ -46,7 +46,7 @@ pub struct RequestResult<'info> {
     #[account(signer)]
     pub payer_authority: AccountInfo<'info>,
     /// CHECK: TODO
-    #[account(address = solana_program::sysvar::recent_blockhashes::ID)]
+    #[account(address = anchor_lang::solana_program::sysvar::recent_blockhashes::ID)]
     pub recent_blockhashes: AccountInfo<'info>,
     /// CHECK: TODO
     pub program_state: AccountInfo<'info>,

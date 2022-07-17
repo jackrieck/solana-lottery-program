@@ -13,6 +13,9 @@ solana config set -u devnet
 # copy path from 'Keypair Path'
 export ANCHOR_WALLET=$(solana config get | grep 'Keypair Path' | cut -d ' ' -f3)
 
+# export rpc provider
+export ANCHOR_PROVIDER_URL="https://api.devnet.solana.com"
+
 # add phantom wallet pubkey used to connect to dapp through browser
 export PHANTOM_WALLET="phantom-wallet-pubkey"
 
@@ -30,7 +33,7 @@ spl-token wrap 4 secrets/payer-keypair.json
 # other funcs read from 'clientaccounts.env'
 # required for further commands
 # will read $PHANTOM_WALLET to mint dummy tokens
-ts-node ./sdk/scripts/initialize.ts init --queueKey F8ce7MsckeZAbAGmxjJNetxYXQa9mKr9nnrC3qKubyYy --userAddress $PHANTOM_WALLET
+ ts-node ./sdk/scripts/initialize.ts init --queueKey F8ce7MsckeZAbAGmxjJNetxYXQa9mKr9nnrC3qKubyYy --userAddress $PHANTOM_WALLET
 
 # run app in a new terminal
 cd app/ && yarn run dev
