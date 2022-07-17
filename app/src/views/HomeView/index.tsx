@@ -9,7 +9,7 @@ import * as anchor from "@project-serum/anchor";
 import { NoLossLottery } from "../../../../target/types/no_loss_lottery";
 import { TicketCard } from "./ticketcard";
 import styles from "./index.module.css";
-import CountDownTimer from "components/CountDownTimer";
+import CountDownTimer, { CountDownTimerType } from "components/CountDownTimer";
 import {
   ConfirmOptions,
   MemcmpFilter,
@@ -91,7 +91,7 @@ const tokenSwapAuthority = new anchor.web3.PublicKey(
 );
 const poolFee = new anchor.web3.PublicKey(process.env.NEXT_PUBLIC_poolFee!);
 
-let hoursMinSecs = { hours: 0, minutes: 0, seconds: 0 };
+let hoursMinSecs: CountDownTimerType = [ 0, 0, 0 ];
 
 function getTimeRemaining(endtime: number) {
   const now = Date.parse(new Date().toUTCString()) / 1000;
@@ -456,11 +456,11 @@ export const HomeView: FC = ({}) => {
       const timeValues = getTimeRemaining(
         vaultManagerAccount.cutoffTime.toNumber()
       );
-      hoursMinSecs = {
-        hours: timeValues.days * 24 + timeValues.hours,
-        minutes: timeValues.minutes,
-        seconds: timeValues.seconds,
-      };
+      hoursMinSecs = [
+        timeValues.days * 24 + timeValues.hours,
+        timeValues.minutes,
+        timeValues.seconds,
+      ];
 
       let newDashboard = [];
       let drawing = "N/A";
