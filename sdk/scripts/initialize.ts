@@ -6,9 +6,10 @@ import { PublicKey, SystemProgram } from "@solana/web3.js";
 import { Program } from "@project-serum/anchor";
 import { NoLossLottery } from "../../target/types/no_loss_lottery";
 import {
+  AnchorWallet,
   Callback,
-  OracleQueueAccount,
   PermissionAccount,
+  ProgramStateAccount,
   SwitchboardPermission,
   VrfAccount,
 } from "@switchboard-xyz/switchboard-v2";
@@ -113,6 +114,7 @@ async function initialize() {
 export async function create(program: Program<NoLossLottery>, clientAccounts: ClientAccounts, argv: any): Promise<void> {
   const { payer, cluster, rpcUrl, queueKey, keypair, maxResult, drawDuration, ticketPrice, lotteryName } = argv;
   const payerKeypair = loadKeypair(payer);
+  console.log("payer: %s", payerKeypair.publicKey.toString());
   const switchboardProgram = await loadSwitchboardProgram(
     payerKeypair,
     cluster,
@@ -157,7 +159,6 @@ export async function create(program: Program<NoLossLottery>, clientAccounts: Cl
     programId: vrfclientProgram.programId,
     accounts: [
       // ensure all accounts in updateResult are populated
-      { pubkey: stateAccount.publicKey, isSigner: false, isWritable: true },
       { pubkey: vrfSecret.publicKey, isSigner: false, isWritable: false },
       { pubkey: vaultManager, isSigner: false, isWritable: true },
     ],
@@ -249,9 +250,8 @@ export async function create(program: Program<NoLossLottery>, clientAccounts: Cl
         systemProgram: SystemProgram.programId,
         tokenProgram: spl.TOKEN_PROGRAM_ID,
         rent: anchor.web3.SYSVAR_RENT_PUBKEY,
-      },
- 
-      signers: [payerKeypair, payerKeypair],
+      }, 
+      signers: [payerKeypair],
     }
   );
   console.log(toAccountString("Program State", stateAccount.publicKey));

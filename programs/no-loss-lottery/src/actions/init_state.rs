@@ -88,7 +88,6 @@ pub struct InitState<'info> {
 
 #[derive(Clone, AnchorSerialize, AnchorDeserialize)]
 pub struct InitStateParams {
-    pub client_state_bump: u8,
     pub max_result: u64,
     pub draw_duration: u64,
     pub ticket_price: u64,

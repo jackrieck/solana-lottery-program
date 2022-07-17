@@ -63,7 +63,8 @@ export async function loadVrfClientProgram(
   cluster: Cluster, // should verify example has been deployed
   rpcUrl: string
 ): Promise<anchor.Program> {
-  const programId = loadVrfExamplePid();
+  // devnet
+  const programId = new anchor.web3.PublicKey("2TfB33aLaneQb5TNVwyDz3jSZXS6jdW2ARw1Dgf84XCG");
   const connection = new Connection(rpcUrl, {
     commitment: "confirmed",
   });

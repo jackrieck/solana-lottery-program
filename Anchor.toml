@@ -7,16 +7,12 @@ no_loss_lottery = "6aokcsMZ38t6FHLaiyFGdJPceVeqh6FE7Dkc8UWFDQam"
 [registry]
 url = "https://anchor.projectserum.com"
 
-#[provider]
-#cluster = "devnet"
-#wallet = "wallet.json"
-
 [provider]
-cluster = "localnet"
+cluster = "devnet"
 wallet = "/Users/jack/.config/solana/id.json"
 
 [test.validator]
-url = "https://api.devnet.solana.com"
+url = "https://devnet.genesysgo.net"
 
 # token-swap
 [[test.validator.clone]]

@@ -33,7 +33,7 @@ spl-token wrap 4 secrets/payer-keypair.json
 # other funcs read from 'clientaccounts.env'
 # required for further commands
 # will read $PHANTOM_WALLET to mint dummy tokens
- ts-node ./sdk/scripts/initialize.ts init --queueKey F8ce7MsckeZAbAGmxjJNetxYXQa9mKr9nnrC3qKubyYy --userAddress $PHANTOM_WALLET
+ts-node ./sdk/scripts/initialize.ts init --queueKey F8ce7MsckeZAbAGmxjJNetxYXQa9mKr9nnrC3qKubyYy --userAddress $PHANTOM_WALLET
 
 # run app in a new terminal
 cd app/ && yarn run dev
@@ -81,3 +81,8 @@ anchor test
 1. Convert from PDA only to PDA + NFT
 2. Use Orca in Dev, SOL_ORCA
 3. Split lottery and integration programs
+
+### TODO
+
+- Prize vault
+- Change VaultManager to LotteryManager
