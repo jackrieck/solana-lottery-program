@@ -36,7 +36,7 @@ export default function useProgram(
     commitment: "confirmed",
   };
   const provider = new anchor.Provider(connection, wallet, opts);
-  const programId = new anchor.web3.PublicKey(IDL.metadata.address);
+  const programId = new anchor.web3.PublicKey("6aokcsMZ38t6FHLaiyFGdJPceVeqh6FE7Dkc8UWFDQam");
   return new anchor.Program(IDL, programId, provider);
 }
 

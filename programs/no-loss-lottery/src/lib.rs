@@ -1,6 +1,3 @@
-pub mod actions;
-pub use actions::*;
-
 use anchor_lang::prelude::*;
 use anchor_lang::solana_program::program::invoke_signed;
 use anchor_lang::AccountsClose;
@@ -8,11 +5,10 @@ use anchor_spl::{
     associated_token,
     token::{self},
 };
-use mpl_token_metadata::instruction::{
-    create_master_edition_v3, create_metadata_accounts_v2,
-};
+use mpl_token_metadata::instruction::{create_master_edition_v3, create_metadata_accounts_v2};
 use mpl_token_metadata::state::{Collection, DataV2};
 use spl_token_swap::instruction::{swap, Swap};
+use switchboard_v2::{VrfAccountData, VrfRequestRandomness};
 
 const STATE_SEED: &[u8] = b"STATE";
 
@@ -22,34 +18,14 @@ declare_id!("6aokcsMZ38t6FHLaiyFGdJPceVeqh6FE7Dkc8UWFDQam");
 pub mod no_loss_lottery {
     use super::*;
 
-    #[access_control(ctx.accounts.validate(&ctx, &params))]
-    pub fn init_state(ctx: Context<InitState>, params: InitStateParams) -> Result<()> {
-        return InitState::actuate(ctx, &params)
-    }
-
-    #[access_control(ctx.accounts.validate(&ctx, &params))]
-    pub fn update_result(ctx: Context<UpdateResult>, params: UpdateResultParams) -> Result<()> {
-        return UpdateResult::actuate(ctx, &params);
-    }
-
-    #[access_control(ctx.accounts.validate(&ctx, &params))]
-    pub fn request_result(ctx: Context<RequestResult>, params: RequestResultParams) -> Result<()> {
-        return RequestResult::actuate(&ctx, &params);
-    }
-
-    pub fn initialize(
-        ctx: Context<Initialize>,
-        lottery_name: String,
-        draw_duration: u64,
-        ticket_price: u64,
-    ) -> Result<()> {
+    pub fn initialize(ctx: Context<Initialize>, params: InitializeParams) -> Result<()> {
         // ticket_price must be > 0
-        if ticket_price <= 0 {
+        if params.ticket_price <= 0 {
             return Err(error!(SLPErrorCode::InvalidTicketPrice));
         }
 
         // draw_duration must be > 0
-        if draw_duration <= 0 {
+        if params.draw_duration <= 0 {
             return Err(error!(SLPErrorCode::InvalidDrawDuration));
         }
 
@@ -77,7 +53,7 @@ pub mod no_loss_lottery {
 
         // metadata params
         let collection_data = DataV2 {
-            name: lottery_name.clone(),
+            name: params.lottery_name.clone(),
             symbol: "LOTTO".to_string(),
             uri: "https://lottery-ticket1.s3.us-west-1.amazonaws.com/collection.json".to_string(),
             seller_fee_basis_points: 0,
@@ -163,16 +139,23 @@ pub mod no_loss_lottery {
             ]],
         )?;
 
+        // set VRF config
+        let state = &mut ctx.accounts.vrf_state.load_init()?;
+        state.max_result = params.max_result;
+        state.vrf = ctx.accounts.vrf.key();
+        state.authority = ctx.accounts.user.key();
+        state.bump = *ctx.bumps.get("state").unwrap();
+
         // set vault manager config
         let vault_mgr = &mut ctx.accounts.vault_manager;
-        vault_mgr.draw_duration = draw_duration;
+        vault_mgr.draw_duration = params.draw_duration;
         vault_mgr.cutoff_time = 0;
-        vault_mgr.ticket_price = ticket_price;
+        vault_mgr.ticket_price = params.ticket_price;
         vault_mgr.deposit_mint = ctx.accounts.deposit_mint.clone().key();
         vault_mgr.deposit_vault = ctx.accounts.deposit_vault.clone().key();
         vault_mgr.yield_mint = ctx.accounts.yield_mint.clone().key();
         vault_mgr.yield_vault = ctx.accounts.yield_vault.clone().key();
-        vault_mgr.deposit_token_reserve = 10 * ticket_price;
+        vault_mgr.deposit_token_reserve = 10 * params.ticket_price;
         vault_mgr.collection_mint = ctx.accounts.collection_mint.clone().key();
         vault_mgr.circulating_ticket_supply = 0;
 
@@ -503,7 +486,7 @@ pub mod no_loss_lottery {
             .close(ctx.accounts.user.clone().to_account_info())
     }
 
-    pub fn draw(ctx: Context<Draw>) -> Result<()> {
+    pub fn draw(ctx: Context<Draw>, sb_state_bump: u8, permission_bump: u8) -> Result<()> {
         let cutoff_time = ctx.accounts.vault_manager.cutoff_time;
 
         // if no tickets have been purchased, do not draw
@@ -516,24 +499,105 @@ pub mod no_loss_lottery {
             return Err(SLPErrorCode::CallDispense.into());
         }
 
-        let now = get_current_time();
-
         // if time remaining then error
+        let now = get_current_time();
         if now < cutoff_time {
             return Err(SLPErrorCode::TimeRemaining.into());
         }
 
-        // randomly choose 6 winning numbers
-        let numbers: [u8; 6] = [1, 2, 3, 4, 5, 6];
+        let switchboard_program = ctx.accounts.switchboard_program.to_account_info();
 
-        // set numbers in vault_manager account
-        ctx.accounts.vault_manager.winning_numbers = numbers;
+        let vrf_request_randomness = VrfRequestRandomness {
+            authority: ctx.accounts.vrf_state.to_account_info(),
+            vrf: ctx.accounts.vrf.to_account_info(),
+            oracle_queue: ctx.accounts.oracle_queue.to_account_info(),
+            queue_authority: ctx.accounts.queue_authority.to_account_info(),
+            data_buffer: ctx.accounts.data_buffer.to_account_info(),
+            permission: ctx.accounts.permission.to_account_info(),
+            escrow: ctx.accounts.escrow.clone(),
+            payer_wallet: ctx.accounts.vrf_payment_wallet.clone(),
+            payer_authority: ctx.accounts.user.to_account_info(),
+            recent_blockhashes: ctx.accounts.recent_blockhashes.to_account_info(),
+            program_state: ctx.accounts.program_state.to_account_info(),
+            token_program: ctx.accounts.token_program.to_account_info(),
+        };
 
-        // store numbers for frontend to query
-        ctx.accounts.vault_manager.previous_winning_numbers = numbers;
+        let state = &mut ctx.accounts.vrf_state.load()?;
+
+        let vrf_key = ctx.accounts.vrf.key.clone();
+        let authority_key = ctx.accounts.user.key.clone();
+        let state_seeds: &[&[&[u8]]] = &[&[
+            &STATE_SEED,
+            vrf_key.as_ref(),
+            authority_key.as_ref(),
+            &[state.bump],
+        ]];
+
+        vrf_request_randomness.invoke_signed(
+            switchboard_program,
+            sb_state_bump,
+            permission_bump,
+            state_seeds,
+        )?;
+
+        //// randomly choose 6 winning numbers
+        //let numbers: [u8; 6] = [1, 2, 3, 4, 5, 6];
+
+        //// set numbers in vault_manager account
+        //ctx.accounts.vault_manager.winning_numbers = numbers;
+
+        //// store numbers for frontend to query
+        //ctx.accounts.vault_manager.previous_winning_numbers = numbers;
 
         // locked `buy` function until `find` called
         ctx.accounts.vault_manager.locked = true;
+        Ok(())
+    }
+
+    pub fn set_drawn_numbers(ctx: Context<SetDrawnNumbers>) -> Result<()> {
+        // parse vrf account
+        let vrf_account_info = &ctx.accounts.vrf;
+        let vrf = VrfAccountData::new(vrf_account_info)?;
+
+        // get vrf result
+        let result_buffer = vrf.get_result()?;
+        if result_buffer == [0u8; 32] {
+            msg!("vrf buffer empty");
+            return Ok(());
+        }
+
+        // check that its not the same result as last time
+        let state = &mut ctx.accounts.state.load_mut()?;
+        let max_result = state.max_result;
+        if result_buffer == state.result_buffer {
+            msg!("existing result_buffer");
+            return Ok(());
+        }
+
+        msg!("Result buffer is {:?}", result_buffer);
+        let value: &[u128] = bytemuck::cast_slice(&result_buffer[..]);
+        msg!("u128 buffer {:?}", value);
+        let result = value[0] % max_result as u128;
+        msg!("Current VRF Value [0 - {}) = {}!", max_result, result);
+
+        if state.result != result {
+            state.result_buffer = result_buffer;
+            state.result = result;
+            state.last_timestamp = get_current_time() as i64;
+        }
+
+        // parse the result numbers into 6 separate numbers
+        let formatted_numbers = format!("{:0>6}", result.to_string());
+        let d0: u8 = (&formatted_numbers[0..1]).parse().unwrap();
+        let d1: u8 = (&formatted_numbers[1..2]).parse().unwrap();
+        let d2: u8 = (&formatted_numbers[2..3]).parse().unwrap();
+        let d3: u8 = (&formatted_numbers[3..4]).parse().unwrap();
+        let d4: u8 = (&formatted_numbers[4..5]).parse().unwrap();
+        let d5: u8 = (&formatted_numbers[5..6]).parse().unwrap();
+
+        // set the winning numbers in the vault manager
+        ctx.accounts.vault_manager.previous_winning_numbers = [d0, d1, d2, d3, d4, d5];
+        ctx.accounts.vault_manager.winning_numbers = [d0, d1, d2, d3, d4, d5];
         Ok(())
     }
 
@@ -776,6 +840,7 @@ pub mod no_loss_lottery {
 
 #[account(zero_copy)]
 pub struct VrfClient {
+    pub bump: u8,
     pub authority: Pubkey,
     pub max_result: u64,
     pub vrf: Pubkey,
@@ -789,7 +854,16 @@ impl Default for VrfClient {
     }
 }
 
+#[derive(Clone, AnchorSerialize, AnchorDeserialize)]
+pub struct InitializeParams {
+    pub max_result: u64,
+    pub draw_duration: u64,
+    pub ticket_price: u64,
+    pub lottery_name: String,
+}
+
 #[derive(Accounts)]
+#[instruction(params: InitializeParams)]
 pub struct Initialize<'info> {
     #[account(mut)]
     pub deposit_mint: Box<Account<'info, token::Mint>>,
@@ -839,6 +913,22 @@ pub struct Initialize<'info> {
         token::authority = vault_manager,
         seeds = [collection_mint.key().as_ref()], bump)]
     pub collection_ata: Account<'info, token::TokenAccount>,
+
+    #[account(
+        init,
+        seeds = [
+            STATE_SEED,
+            vrf.key().as_ref(),
+            user.key().as_ref(),
+        ],
+        payer = user,
+        bump,
+    )]
+    pub vrf_state: AccountLoader<'info, VrfClient>,
+    /// CHECK: todo
+    pub vrf_authority: AccountInfo<'info>,
+    /// CHECK: todo
+    pub vrf: AccountInfo<'info>,
 
     #[account(mut)]
     pub user: Signer<'info>,
@@ -1018,12 +1108,55 @@ pub struct Draw<'info> {
         bump)]
     pub vault_manager: Box<Account<'info, VaultManager>>,
 
+    #[account(
+        mut,
+        seeds = [
+            STATE_SEED,
+            vrf.key().as_ref(),
+            user.key().as_ref(),
+        ],
+        bump,
+    )]
+    pub vrf_state: AccountLoader<'info, VrfClient>,
+    /// CHECK: TODO
+    pub switchboard_program: AccountInfo<'info>,
+    /// CHECK: TODO
+    #[account(mut)]
+    pub vrf: AccountInfo<'info>,
+    /// CHECK: TODO
+    pub oracle_queue: AccountInfo<'info>,
+    /// CHECK: TODO
+    pub queue_authority: AccountInfo<'info>,
+    /// CHECK: TODO
+    pub data_buffer: AccountInfo<'info>,
+    /// CHECK: TODO
+    #[account(mut)]
+    pub permission: AccountInfo<'info>,
+    #[account(mut, constraint = escrow.owner == program_state.key())]
+    pub escrow: Account<'info, token::TokenAccount>,
+    pub vrf_payment_wallet: Account<'info, token::TokenAccount>,
+    /// CHECK: TODO
+    #[account(address = solana_program::sysvar::recent_blockhashes::ID)]
+    pub recent_blockhashes: AccountInfo<'info>,
+    /// CHECK: TODO
+    pub program_state: AccountInfo<'info>,
+
     #[account(mut)]
     pub user: Signer<'info>,
 
     pub system_program: Program<'info, System>,
     pub token_program: Program<'info, token::Token>,
     pub rent: Sysvar<'info, Rent>,
+}
+
+#[derive(Accounts)]
+pub struct SetDrawnNumbers<'info> {
+    #[account(mut)]
+    pub state: AccountLoader<'info, VrfClient>,
+    /// CHECK: todo
+    pub vrf: AccountInfo<'info>,
+    #[account(mut)]
+    pub vault_manager: Account<'info, VaultManager>,
 }
 
 #[derive(Accounts)]

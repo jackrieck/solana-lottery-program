@@ -14,6 +14,8 @@ import {
   Edition,
 } from "@metaplex-foundation/mpl-token-metadata";
 import { create } from "./scripts/initialize";
+import * as sb from "@switchboard-xyz/switchboard-v2";
+import * as sbUtils from "@switchboard-xyz/sbv2-utils";
 
 export interface ClientAccounts {
   depositMint: anchor.web3.PublicKey;
@@ -144,6 +146,53 @@ export class Client {
   public async draw(): Promise<string> {
     const accounts = await this.readClientAccounts();
 
+    // init switchboard client
+    const sbProgram = await sb.loadSwitchboardProgram(
+      "devnet",
+      this.program.provider.connection,
+      { commitment: "confirmed" }
+    );
+    console.log(
+      "switchboard program loaded: %s",
+      sbProgram.programId.toString()
+    );
+
+    // load devnet queue
+    const sbTestCtx = await sbUtils.SwitchboardTestContext.loadDevnetQueue(
+      sbProgram.provider as anchor.AnchorProvider, "F8ce7MsckeZAbAGmxjJNetxYXQa9mKr9nnrC3qKubyYy", 5_000_000
+    );
+
+    const queue = sbTestCtx.queue;
+    const { unpermissionedVrfEnabled, authority, dataBuffer } = await queue.loadData();
+
+    const permissionAccount = await sb.PermissionAccount.create(
+      sbProgram,
+      {
+        authority,
+        granter: queue.publicKey,
+        grantee: vrf.publicKey,
+      }
+    );
+
+    const [programStateAccount, programStateBump] = sb.ProgramStateAccount.fromSeed(sbProgram);
+
+    const [permissionKey, permissionBump] = PermissionAccount.fromSeed(
+      sbProgram,
+      authority,
+      queue.publicKey,
+      vrf.publicKey, 
+    );
+
+    const mint = await programStateAccount.getTokenMint();
+    const payerTokenAccount = await splToken.getOrCreateAssociatedTokenAccount(
+      provider.connection,
+      payer,
+      mint.address,
+      payer.publicKey
+    );
+
+    const { escrow } = await vrf.loadData();
+
     return this.program.rpc.draw({
       accounts: {
         depositMint: accounts.depositMint,
@@ -157,6 +206,13 @@ export class Client {
         rent: anchor.web3.SYSVAR_RENT_PUBKEY,
       },
     });
+  }
+
+  // set winning numbers
+  public async setDrawnNumbers(): Promise<string> {
+    const accounts = await this.readClientAccounts(); 
+    
+    return this.program.rpc.setDrawnNumbers()
   }
 
   // stake deposit tokens
